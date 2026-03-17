@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { createChart, AreaSeries } from 'lightweight-charts'
-import type { IChartApi, ISeriesApi, AreaData, Time } from 'lightweight-charts'
+import { createChart, CandlestickSeries, HistogramSeries } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi, CandlestickData, HistogramData, Time } from 'lightweight-charts'
 import type { HistoricalDataPoint, ChartRange } from '../../types'
 import { useStockChart } from '../../hooks'
 import { LoadingSpinner } from '../common/LoadingSpinner'
@@ -16,10 +16,21 @@ const RANGES: { label: string; value: ChartRange }[] = [
   { label: 'MAX', value: 'max' },
 ]
 
-function toChartData(points: HistoricalDataPoint[]): AreaData<Time>[] {
+function toCandlestickData(points: HistoricalDataPoint[]): CandlestickData<Time>[] {
   return points.map((p) => ({
     time: (new Date(p.timestamp).getTime() / 1000) as Time,
-    value: p.close,
+    open: p.open,
+    high: p.high,
+    low: p.low,
+    close: p.close,
+  }))
+}
+
+function toVolumeData(points: HistoricalDataPoint[]): HistogramData<Time>[] {
+  return points.map((p) => ({
+    time: (new Date(p.timestamp).getTime() / 1000) as Time,
+    value: p.volume,
+    color: p.close >= p.open ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)',
   }))
 }
 
@@ -31,7 +42,8 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
   const [range, setRange] = useState<ChartRange>('1d')
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const seriesRef = useRef<ISeriesApi<'Area'> | null>(null)
+  const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null)
   const { data, isLoading } = useStockChart(symbol, range)
 
   useEffect(() => {
@@ -59,15 +71,27 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
       },
     })
 
-    const series = chart.addSeries(AreaSeries, {
-      lineColor: '#22d3ee',
-      topColor: 'rgba(34, 211, 238, 0.3)',
-      bottomColor: 'rgba(34, 211, 238, 0.02)',
-      lineWidth: 2,
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderUpColor: '#22c55e',
+      borderDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+    })
+
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'volume',
+    })
+
+    chart.priceScale('volume').applyOptions({
+      scaleMargins: { top: 0.8, bottom: 0 },
     })
 
     chartRef.current = chart
-    seriesRef.current = series
+    candleRef.current = candleSeries
+    volumeRef.current = volumeSeries
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0]
@@ -76,6 +100,7 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
           width: entry.contentRect.width,
           height: entry.contentRect.height,
         })
+        chart.timeScale().fitContent()
       }
     })
     observer.observe(containerRef.current)
@@ -84,14 +109,15 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
       observer.disconnect()
       chart.remove()
       chartRef.current = null
-      seriesRef.current = null
+      candleRef.current = null
+      volumeRef.current = null
     }
   }, [])
 
   useEffect(() => {
-    if (data && seriesRef.current) {
-      const chartData = toChartData(data)
-      seriesRef.current.setData(chartData)
+    if (data && candleRef.current && volumeRef.current) {
+      candleRef.current.setData(toCandlestickData(data))
+      volumeRef.current.setData(toVolumeData(data))
       chartRef.current?.timeScale().fitContent()
     }
   }, [data])
@@ -101,7 +127,7 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
       className="flex flex-col"
       style={{ borderBottom: '1px solid var(--border)' }}
     >
-      <div className="flex gap-1 px-6 py-3">
+      <div className="flex flex-wrap gap-1 px-4 py-3 lg:px-6">
         {RANGES.map((r) => (
           <button
             key={r.value}

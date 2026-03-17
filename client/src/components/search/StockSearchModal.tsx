@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, X } from 'lucide-react'
-import { useStockSearch, useWatchlist } from '../../hooks'
+import { useStockSearch } from '../../hooks'
 
 interface StockSearchModalProps {
   onClose: () => void
@@ -12,7 +12,6 @@ export function StockSearchModal({ onClose }: StockSearchModalProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const { data: results, isLoading } = useStockSearch(query)
-  const { addToWatchlist } = useWatchlist()
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -26,8 +25,7 @@ export function StockSearchModal({ onClose }: StockSearchModalProps) {
     return () => window.removeEventListener('keydown', handleKey)
   }, [onClose])
 
-  const handleSelect = (symbol: string, name: string) => {
-    addToWatchlist({ symbol, name })
+  const handleSelect = (symbol: string) => {
     navigate(`/stock/${symbol}`)
     onClose()
   }
@@ -53,7 +51,7 @@ export function StockSearchModal({ onClose }: StockSearchModalProps) {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by symbol or company name..."
+            placeholder="종목명 또는 심볼 검색 (예: 삼성전자, AAPL)..."
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--text-primary)', border: 'none' }}
           />
@@ -85,7 +83,7 @@ export function StockSearchModal({ onClose }: StockSearchModalProps) {
           {results?.map((result) => (
             <button
               key={result.symbol}
-              onClick={() => handleSelect(result.symbol, result.name)}
+              onClick={() => handleSelect(result.symbol)}
               className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:brightness-125"
               style={{
                 backgroundColor: 'transparent',

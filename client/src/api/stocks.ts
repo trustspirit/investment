@@ -6,6 +6,8 @@ import type {
   CompanyInfo,
   NewsArticle,
   ChartRange,
+  RecommendationData,
+  MarketIndicator,
 } from '../types'
 
 export function searchStocks(query: string): Promise<SymbolSearchResult[]> {
@@ -28,4 +30,12 @@ export function getCompanyInfo(symbol: string): Promise<CompanyInfo> {
 
 export function getNews(symbol: string): Promise<NewsArticle[]> {
   return fetchAPI<NewsArticle[]>(`/api/stocks/${encodeURIComponent(symbol)}/news`)
+}
+
+export function getRecommendation(symbol: string): Promise<RecommendationData> {
+  return fetchAPI<RecommendationData>(`/api/stocks/${encodeURIComponent(symbol)}/recommendation`)
+}
+
+export function getMarketIndicators(): Promise<MarketIndicator[]> {
+  return fetchAPI<MarketIndicator[]>('/api/market/indicators')
 }

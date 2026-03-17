@@ -28,6 +28,7 @@ export interface NewsArticle {
   thumbnail: string
   relatedSymbols: string[]
   category: 'company' | 'sector' | 'market' | 'geopolitical'
+  sentiment: 'positive' | 'negative' | 'neutral'
 }
 
 export interface CompanyInfo {
@@ -80,3 +81,67 @@ export interface WSPriceUpdate {
 }
 
 export type ChartRange = 'pre' | '1d' | '5d' | '1mo' | '6mo' | '1y' | '5y' | 'max'
+
+export interface RecommendationTrend {
+  period: string
+  strongBuy: number
+  buy: number
+  hold: number
+  sell: number
+  strongSell: number
+}
+
+export interface RecommendationData {
+  symbol: string
+  recommendationKey: string
+  recommendationMean: number
+  numberOfAnalysts: number
+  targetMeanPrice?: number
+  targetHighPrice?: number
+  targetLowPrice?: number
+  currentPrice: number
+  currency: string
+  trend: RecommendationTrend[]
+}
+
+export interface PriceRange {
+  low: number
+  high: number
+  reason: string
+}
+
+export interface TimingAnalysis {
+  recommendation: string
+  timeframe: string
+  conditions: string[]
+}
+
+export interface AITradeStrategy {
+  symbol: string
+  analysisTime: string
+  currentPrice: number
+  currency: string
+  signal: string
+  confidence: number
+  entryPrice: PriceRange
+  stopLoss: PriceRange
+  takeProfit: PriceRange
+  buyTiming: TimingAnalysis
+  sellTiming: TimingAnalysis
+  riskReward: string
+  analysisBasis: string[]
+  marketCondition: string
+  shortTermView: string
+  midTermView: string
+  disclaimer: string
+  provider: string
+}
+
+export interface MarketIndicator {
+  symbol: string
+  name: string
+  price: number
+  change: number
+  changePercent: number
+  currency: string
+}

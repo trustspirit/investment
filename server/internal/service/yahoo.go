@@ -12,9 +12,123 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/shinyoung/investment/internal/model"
 )
+
+// koreanStockEntry maps a Korean company name to its Yahoo Finance symbol and English name.
+type koreanStockEntry struct {
+	Symbol  string
+	Name    string
+	Aliases []string // additional Korean search terms
+}
+
+// koreanStockMap is a static lookup table for Korean stock search.
+// Key: lowercase Korean company name. Values: symbol, English name.
+var koreanStockMap = []koreanStockEntry{
+	// KOSPI major stocks
+	{Symbol: "005930.KS", Name: "Samsung Electronics Co., Ltd.", Aliases: []string{"삼성전자", "삼성"}},
+	{Symbol: "000660.KS", Name: "SK Hynix Inc.", Aliases: []string{"sk하이닉스", "에스케이하이닉스", "하이닉스"}},
+	{Symbol: "373220.KS", Name: "LG Energy Solution, Ltd.", Aliases: []string{"lg에너지솔루션", "엘지에너지솔루션"}},
+	{Symbol: "207940.KS", Name: "Samsung Biologics Co., Ltd.", Aliases: []string{"삼성바이오로직스", "삼바"}},
+	{Symbol: "005935.KS", Name: "Samsung Electronics Co., Ltd. (Pref)", Aliases: []string{"삼성전자우", "삼성전자우선주"}},
+	{Symbol: "006400.KS", Name: "Samsung SDI Co., Ltd.", Aliases: []string{"삼성sdi", "삼성에스디아이"}},
+	{Symbol: "051910.KS", Name: "LG Chem, Ltd.", Aliases: []string{"lg화학", "엘지화학"}},
+	{Symbol: "035420.KS", Name: "NAVER Corporation", Aliases: []string{"네이버", "naver"}},
+	{Symbol: "000270.KS", Name: "Kia Corporation", Aliases: []string{"기아", "기아차", "기아자동차"}},
+	{Symbol: "005380.KS", Name: "Hyundai Motor Company", Aliases: []string{"현대차", "현대자동차", "현대모터"}},
+	{Symbol: "105560.KS", Name: "KB Financial Group Inc.", Aliases: []string{"kb금융", "kb금융지주", "국민은행"}},
+	{Symbol: "055550.KS", Name: "Shinhan Financial Group Co., Ltd.", Aliases: []string{"신한지주", "신한금융", "신한은행"}},
+	{Symbol: "035720.KS", Name: "Kakao Corp.", Aliases: []string{"카카오"}},
+	{Symbol: "068270.KS", Name: "Celltrion, Inc.", Aliases: []string{"셀트리온"}},
+	{Symbol: "028260.KS", Name: "Samsung C&T Corporation", Aliases: []string{"삼성물산"}},
+	{Symbol: "012330.KS", Name: "Hyundai Mobis Co., Ltd.", Aliases: []string{"현대모비스", "모비스"}},
+	{Symbol: "066570.KS", Name: "LG Electronics Inc.", Aliases: []string{"lg전자", "엘지전자"}},
+	{Symbol: "003550.KS", Name: "LG Corp.", Aliases: []string{"lg", "엘지"}},
+	{Symbol: "096770.KS", Name: "SK Innovation Co., Ltd.", Aliases: []string{"sk이노베이션", "에스케이이노베이션"}},
+	{Symbol: "034730.KS", Name: "SK Inc.", Aliases: []string{"sk", "에스케이"}},
+	{Symbol: "030200.KS", Name: "KT Corporation", Aliases: []string{"kt", "케이티"}},
+	{Symbol: "032830.KS", Name: "Samsung Life Insurance Co., Ltd.", Aliases: []string{"삼성생명"}},
+	{Symbol: "003670.KS", Name: "POSCO Holdings Inc.", Aliases: []string{"포스코홀딩스", "포스코", "posco"}},
+	{Symbol: "009150.KS", Name: "Samsung Electro-Mechanics Co., Ltd.", Aliases: []string{"삼성전기"}},
+	{Symbol: "010950.KS", Name: "S-Oil Corporation", Aliases: []string{"에쓰오일", "s-oil", "s오일"}},
+	{Symbol: "017670.KS", Name: "SK Telecom Co., Ltd.", Aliases: []string{"sk텔레콤", "에스케이텔레콤", "skt"}},
+	{Symbol: "086790.KS", Name: "Hana Financial Group Inc.", Aliases: []string{"하나금융지주", "하나금융", "하나은행"}},
+	{Symbol: "316140.KS", Name: "Woori Financial Group Inc.", Aliases: []string{"우리금융지주", "우리금융", "우리은행"}},
+	{Symbol: "034020.KS", Name: "Doosan Enerbility Co., Ltd.", Aliases: []string{"두산에너빌리티", "두산중공업"}},
+	{Symbol: "018260.KS", Name: "Samsung SDS Co., Ltd.", Aliases: []string{"삼성에스디에스", "삼성sds"}},
+	{Symbol: "011200.KS", Name: "HMM Co., Ltd.", Aliases: []string{"hmm", "현대상선", "에이치엠엠"}},
+	{Symbol: "033780.KS", Name: "KT&G Corporation", Aliases: []string{"kt&g", "케이티앤지"}},
+	{Symbol: "009540.KS", Name: "Hanwha Aerospace Co., Ltd.", Aliases: []string{"한화에어로스페이스", "한화에어로"}},
+	{Symbol: "352820.KS", Name: "HYBE Co., Ltd.", Aliases: []string{"하이브", "빅히트"}},
+	{Symbol: "000810.KS", Name: "Samsung Fire & Marine Insurance Co., Ltd.", Aliases: []string{"삼성화재"}},
+	// KOSDAQ major stocks
+	{Symbol: "247540.KQ", Name: "Ecopro BM Co., Ltd.", Aliases: []string{"에코프로비엠"}},
+	{Symbol: "086520.KQ", Name: "Ecopro Co., Ltd.", Aliases: []string{"에코프로"}},
+	{Symbol: "263750.KQ", Name: "Pearl Abyss Corp.", Aliases: []string{"펄어비스"}},
+	{Symbol: "293490.KQ", Name: "Kakao Games Corp.", Aliases: []string{"카카오게임즈"}},
+	{Symbol: "035760.KQ", Name: "CJ ENM Co., Ltd.", Aliases: []string{"cj enm", "cj이엔엠"}},
+	{Symbol: "196170.KQ", Name: "Alteogen, Inc.", Aliases: []string{"알테오젠"}},
+	{Symbol: "328130.KQ", Name: "LUNIT Inc.", Aliases: []string{"루닛"}},
+	{Symbol: "041510.KQ", Name: "SM Entertainment Co., Ltd.", Aliases: []string{"에스엠", "sm엔터", "sm엔터테인먼트"}},
+	{Symbol: "251270.KQ", Name: "Netmarble Corporation", Aliases: []string{"넷마블"}},
+	{Symbol: "112040.KQ", Name: "Wemade Co., Ltd.", Aliases: []string{"위메이드"}},
+	{Symbol: "403870.KQ", Name: "HPSP Co., Ltd.", Aliases: []string{"hpsp"}},
+	{Symbol: "377300.KQ", Name: "Kakao Pay Corp.", Aliases: []string{"카카오페이"}},
+	{Symbol: "036570.KQ", Name: "NCsoft Corporation", Aliases: []string{"엔씨소프트", "nc소프트", "ncsoft"}},
+}
+
+// containsKorean checks if the string contains any Korean characters (Hangul).
+func containsKorean(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Hangul, r) {
+			return true
+		}
+	}
+	return false
+}
+
+// searchKoreanStocks searches the static Korean stock map for matches.
+func searchKoreanStocks(query string) []model.SymbolSearchResult {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return nil
+	}
+
+	var results []model.SymbolSearchResult
+	seen := make(map[string]bool)
+
+	for _, entry := range koreanStockMap {
+		for _, alias := range entry.Aliases {
+			if strings.Contains(strings.ToLower(alias), query) {
+				if !seen[entry.Symbol] {
+					seen[entry.Symbol] = true
+					results = append(results, model.SymbolSearchResult{
+						Symbol:   entry.Symbol,
+						Name:     entry.Name,
+						Exchange: exchangeFromSymbol(entry.Symbol),
+						Type:     "equity",
+					})
+				}
+				break
+			}
+		}
+	}
+
+	return results
+}
+
+// exchangeFromSymbol extracts exchange name from Yahoo Finance symbol suffix.
+func exchangeFromSymbol(symbol string) string {
+	if strings.HasSuffix(symbol, ".KS") {
+		return "KSE"
+	}
+	if strings.HasSuffix(symbol, ".KQ") {
+		return "KOE"
+	}
+	return ""
+}
 
 const (
 	yahooChartURL  = "https://query1.finance.yahoo.com/v8/finance/chart"
@@ -418,6 +532,15 @@ func (s *YahooService) GetCompanyInfo(ctx context.Context, symbol string) (model
 }
 
 func (s *YahooService) SearchSymbol(ctx context.Context, query string) ([]model.SymbolSearchResult, error) {
+	if containsKorean(query) {
+		localResults := searchKoreanStocks(query)
+		if len(localResults) > 0 {
+			return localResults, nil
+		}
+		slog.Warn("no Korean stock match found", "query", query)
+		return []model.SymbolSearchResult{}, nil
+	}
+
 	u := fmt.Sprintf("%s?q=%s&quotesCount=10&newsCount=0&listsCount=0", yahooSearchURL, url.QueryEscape(query))
 
 	body, err := s.doRequest(ctx, u)
@@ -429,6 +552,7 @@ func (s *YahooService) SearchSymbol(ctx context.Context, query string) ([]model.
 		Quotes []struct {
 			Symbol    string `json:"symbol"`
 			ShortName string `json:"shortname"`
+			LongName  string `json:"longname"`
 			Exchange  string `json:"exchange"`
 			QuoteType string `json:"quoteType"`
 		} `json:"quotes"`
@@ -441,9 +565,13 @@ func (s *YahooService) SearchSymbol(ctx context.Context, query string) ([]model.
 	results := make([]model.SymbolSearchResult, 0, len(resp.Quotes))
 	for _, q := range resp.Quotes {
 		if q.QuoteType == "EQUITY" || q.QuoteType == "ETF" {
+			name := q.LongName
+			if name == "" {
+				name = q.ShortName
+			}
 			results = append(results, model.SymbolSearchResult{
 				Symbol:   q.Symbol,
-				Name:     q.ShortName,
+				Name:     name,
 				Exchange: q.Exchange,
 				Type:     strings.ToLower(q.QuoteType),
 			})
@@ -603,6 +731,76 @@ func safeVolumeAt(volumes []int64, i int) int64 {
 		return volumes[i]
 	}
 	return 0
+}
+
+var marketIndicatorSymbols = []struct {
+	Symbol string
+	Name   string
+}{
+	{"USDKRW=X", "USD/KRW"},
+	{"^KS11", "KOSPI"},
+	{"^KQ11", "KOSDAQ"},
+	{"^IXIC", "NASDAQ"},
+	{"^GSPC", "S&P 500"},
+	{"^TNX", "US 10Y Treasury"},
+}
+
+func (s *YahooService) GetMarketIndicators(ctx context.Context) ([]model.MarketIndicator, error) {
+	indicators := make([]model.MarketIndicator, 0, len(marketIndicatorSymbols))
+
+	for _, ms := range marketIndicatorSymbols {
+		u := fmt.Sprintf("%s/%s?range=1d&interval=1d", yahooChartURL, url.PathEscape(ms.Symbol))
+
+		body, err := s.doRequest(ctx, u)
+		if err != nil {
+			slog.Warn("failed to fetch market indicator", "symbol", ms.Symbol, "error", err)
+			continue
+		}
+
+		var resp struct {
+			Chart struct {
+				Result []struct {
+					Meta struct {
+						RegularMarketPrice float64 `json:"regularMarketPrice"`
+						ChartPreviousClose float64 `json:"chartPreviousClose"`
+						Currency           string  `json:"currency"`
+					} `json:"meta"`
+				} `json:"result"`
+			} `json:"chart"`
+		}
+
+		if err := json.Unmarshal(body, &resp); err != nil {
+			slog.Warn("failed to parse market indicator", "symbol", ms.Symbol, "error", err)
+			continue
+		}
+
+		if len(resp.Chart.Result) == 0 {
+			continue
+		}
+
+		meta := resp.Chart.Result[0].Meta
+		change := meta.RegularMarketPrice - meta.ChartPreviousClose
+		changePct := 0.0
+		if meta.ChartPreviousClose != 0 {
+			changePct = (change / meta.ChartPreviousClose) * 100
+		}
+
+		currency := meta.Currency
+		if currency == "" {
+			currency = "USD"
+		}
+
+		indicators = append(indicators, model.MarketIndicator{
+			Symbol:        ms.Symbol,
+			Name:          ms.Name,
+			Price:         meta.RegularMarketPrice,
+			Change:        change,
+			ChangePercent: changePct,
+			Currency:      currency,
+		})
+	}
+
+	return indicators, nil
 }
 
 func min(a, b int) int {

@@ -16,7 +16,7 @@ make install
 make dev
 ```
 
-- Server: http://localhost:8080
+- Server: http://localhost:8081
 - Client: http://localhost:5173
 
 ## Tech Stack

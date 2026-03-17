@@ -88,6 +88,9 @@ func main() {
 
 	router.Get("/api/insights/{symbol}", insightHandler.Get)
 	router.Post("/api/insights/{symbol}/generate", insightHandler.Generate)
+	router.Post("/api/insights/{symbol}/strategy", insightHandler.GenerateStrategy)
+
+	router.Get("/api/market/indicators", stockHandler.GetMarketIndicators)
 
 	router.Get("/ws", handler.HandleWebSocket(hub))
 

@@ -102,6 +102,8 @@ func (ns *NewsService) GetAllNews(ctx context.Context, symbol string, sector str
 		allArticles = allArticles[:30]
 	}
 
+	allArticles = applySentiment(allArticles)
+
 	slog.Info("fetched aggregated news", "symbol", symbol, "total", len(allArticles))
 	return allArticles, nil
 }
@@ -268,6 +270,71 @@ func parseRSSDate(dateStr string) time.Time {
 
 func cleanHTMLTitle(title string) string {
 	return strings.TrimSpace(title)
+}
+
+func analyzeSentiment(title string) string {
+	lower := strings.ToLower(title)
+
+	positiveKeywords := []string{
+		// English
+		"surge", "surges", "soar", "soars", "rally", "rallies", "gain", "gains",
+		"rise", "rises", "jump", "jumps", "boom", "booms", "record high",
+		"beat", "beats", "outperform", "upgrade", "upgraded", "bullish",
+		"profit", "growth", "strong", "recovery", "recover", "rebound",
+		"positive", "optimistic", "breakthrough", "innovation", "deal",
+		"partnership", "expansion", "dividend", "buyback", "approval",
+		"upbeat", "exceeds", "exceeded", "all-time high", "breakout",
+		// Korean
+		"상승", "급등", "호재", "성장", "흑자", "호실적", "최고가",
+		"강세", "반등", "회복", "돌파", "수혜", "긍정", "매수",
+		"기대", "확대", "증가", "개선", "호조", "사상최고",
+	}
+
+	negativeKeywords := []string{
+		// English
+		"crash", "crashes", "plunge", "plunges", "drop", "drops", "fall", "falls",
+		"decline", "declines", "tumble", "tumbles", "slump", "slumps", "sell-off",
+		"selloff", "loss", "losses", "miss", "misses", "downgrade", "downgraded",
+		"bearish", "recession", "fear", "fears", "risk", "risks", "warning",
+		"warn", "warns", "concern", "crisis", "default", "layoff", "layoffs",
+		"cut", "cuts", "shutdown", "bankruptcy", "fraud", "investigation",
+		"sanction", "sanctions", "tariff", "tariffs", "war", "conflict",
+		"inflation", "rate hike", "deficit", "debt",
+		// Korean
+		"하락", "급락", "폭락", "악재", "적자", "부진", "손실",
+		"약세", "위기", "우려", "경고", "리스크", "불안", "매도",
+		"감소", "축소", "하향", "침체", "파산", "제재", "관세",
+		"전쟁", "갈등", "인플레이션", "금리인상",
+	}
+
+	positiveScore := 0
+	negativeScore := 0
+
+	for _, kw := range positiveKeywords {
+		if strings.Contains(lower, kw) {
+			positiveScore++
+		}
+	}
+	for _, kw := range negativeKeywords {
+		if strings.Contains(lower, kw) {
+			negativeScore++
+		}
+	}
+
+	if positiveScore > negativeScore {
+		return model.NewsSentimentPositive
+	}
+	if negativeScore > positiveScore {
+		return model.NewsSentimentNegative
+	}
+	return model.NewsSentimentNeutral
+}
+
+func applySentiment(articles []model.NewsArticle) []model.NewsArticle {
+	for i := range articles {
+		articles[i].Sentiment = analyzeSentiment(articles[i].Title)
+	}
+	return articles
 }
 
 func deduplicateNews(articles []model.NewsArticle) []model.NewsArticle {

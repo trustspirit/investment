@@ -1,5 +1,5 @@
 import { fetchAPI } from './client'
-import type { AIInsight } from '../types'
+import type { AIInsight, AITradeStrategy } from '../types'
 
 export async function getInsight(symbol: string): Promise<AIInsight | null> {
   const res = await fetch(`/api/insights/${encodeURIComponent(symbol)}`)
@@ -14,6 +14,12 @@ export async function getInsight(symbol: string): Promise<AIInsight | null> {
 
 export function generateInsight(symbol: string): Promise<AIInsight> {
   return fetchAPI<AIInsight>(`/api/insights/${encodeURIComponent(symbol)}/generate`, {
+    method: 'POST',
+  })
+}
+
+export function generateStrategy(symbol: string): Promise<AITradeStrategy> {
+  return fetchAPI<AITradeStrategy>(`/api/insights/${encodeURIComponent(symbol)}/strategy`, {
     method: 'POST',
   })
 }

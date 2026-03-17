@@ -135,6 +135,16 @@ func (h *StockHandler) GetNews(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, news)
 }
 
+func (h *StockHandler) GetMarketIndicators(w http.ResponseWriter, r *http.Request) {
+	indicators, err := h.yahoo.GetMarketIndicators(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, indicators)
+}
+
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

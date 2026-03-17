@@ -48,3 +48,19 @@ func (h *InsightHandler) Generate(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, insight)
 }
+
+func (h *InsightHandler) GenerateStrategy(w http.ResponseWriter, r *http.Request) {
+	symbol := strings.TrimSpace(chi.URLParam(r, "symbol"))
+	if symbol == "" {
+		writeError(w, http.StatusBadRequest, "symbol is required")
+		return
+	}
+
+	strategy, err := h.scheduler.GenerateStrategyForSymbol(r.Context(), symbol)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, strategy)
+}

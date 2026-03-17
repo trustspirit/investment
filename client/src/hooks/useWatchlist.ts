@@ -13,25 +13,55 @@ export function useWatchlist() {
   const addMutation = useMutation({
     mutationFn: ({ symbol, name }: { symbol: string; name: string }) =>
       addToWatchlist(symbol, name),
-    onSuccess: () => {
+    onMutate: async ({ symbol, name }) => {
+      await queryClient.cancelQueries({ queryKey: ['watchlist'] })
+      const previous = queryClient.getQueryData<WatchlistItem[]>(['watchlist'])
+      queryClient.setQueryData<WatchlistItem[]>(['watchlist'], (old) => [
+        ...(old ?? []),
+        { symbol, name, addedAt: new Date().toISOString() },
+      ])
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['watchlist'], context.previous)
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['watchlist'] })
     },
   })
 
   const removeMutation = useMutation({
     mutationFn: (symbol: string) => removeFromWatchlist(symbol),
-    onSuccess: () => {
+    onMutate: async (symbol) => {
+      await queryClient.cancelQueries({ queryKey: ['watchlist'] })
+      const previous = queryClient.getQueryData<WatchlistItem[]>(['watchlist'])
+      queryClient.setQueryData<WatchlistItem[]>(['watchlist'], (old) =>
+        (old ?? []).filter((item) => item.symbol !== symbol),
+      )
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['watchlist'], context.previous)
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['watchlist'] })
     },
   })
 
+  const watchlist = query.data ?? []
+
   return {
-    watchlist: query.data ?? [],
+    watchlist,
     isLoading: query.isLoading,
     error: query.error,
     addToWatchlist: addMutation.mutate,
     removeFromWatchlist: removeMutation.mutate,
     isAdding: addMutation.isPending,
     isRemoving: removeMutation.isPending,
+    isInWatchlist: (symbol: string) => watchlist.some((item) => item.symbol === symbol),
   }
 }

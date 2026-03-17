@@ -91,6 +91,43 @@ func (is *InsightScheduler) refreshAll(ctx context.Context) {
 	}
 }
 
+func (is *InsightScheduler) GenerateStrategyForSymbol(ctx context.Context, symbol string) (model.AITradeStrategy, error) {
+	quote, err := is.yahoo.GetQuote(ctx, symbol)
+	if err != nil {
+		return model.AITradeStrategy{}, err
+	}
+
+	info, err := is.yahoo.GetCompanyInfo(ctx, symbol)
+	if err != nil {
+		slog.Warn("failed to get company info for strategy", "symbol", symbol, "error", err)
+		info = model.CompanyInfo{Symbol: symbol, Name: quote.Name}
+	}
+
+	companyNews, err := is.yahoo.GetNews(ctx, symbol)
+	if err != nil {
+		slog.Warn("failed to get news for strategy", "symbol", symbol, "error", err)
+		companyNews = nil
+	}
+
+	broadNews := is.news.GetBroadNews(ctx, symbol, info.Sector, info.Industry)
+
+	var recommendation *model.RecommendationData
+	rec, err := is.yahoo.GetRecommendation(ctx, symbol)
+	if err != nil {
+		slog.Warn("failed to get recommendation for strategy", "symbol", symbol, "error", err)
+	} else {
+		recommendation = &rec
+	}
+
+	history, err := is.yahoo.GetHistoricalData(ctx, symbol, "1mo")
+	if err != nil {
+		slog.Warn("failed to get historical data for strategy", "symbol", symbol, "error", err)
+		history = nil
+	}
+
+	return is.ai.GenerateStrategy(ctx, symbol, info, companyNews, broadNews, quote, recommendation, history)
+}
+
 func (is *InsightScheduler) generateInsight(ctx context.Context, symbol string) (model.AIInsight, error) {
 	quote, err := is.yahoo.GetQuote(ctx, symbol)
 	if err != nil {
@@ -111,5 +148,13 @@ func (is *InsightScheduler) generateInsight(ctx context.Context, symbol string) 
 
 	broadNews := is.news.GetBroadNews(ctx, symbol, info.Sector, info.Industry)
 
-	return is.ai.GenerateInsight(ctx, symbol, info, companyNews, broadNews, quote)
+	var recommendation *model.RecommendationData
+	rec, err := is.yahoo.GetRecommendation(ctx, symbol)
+	if err != nil {
+		slog.Warn("failed to get recommendation for insight", "symbol", symbol, "error", err)
+	} else {
+		recommendation = &rec
+	}
+
+	return is.ai.GenerateInsight(ctx, symbol, info, companyNews, broadNews, quote, recommendation)
 }

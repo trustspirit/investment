@@ -7,6 +7,6 @@ export function useStockNews(symbol: string) {
     queryKey: ['news', symbol],
     queryFn: () => getNews(symbol),
     enabled: !!symbol,
-    refetchInterval: 60000,
+    refetchInterval: 120000,
   })
 }

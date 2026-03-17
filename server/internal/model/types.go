@@ -32,7 +32,14 @@ type NewsArticle struct {
 	Thumbnail      string    `json:"thumbnail"`
 	RelatedSymbols []string  `json:"relatedSymbols"`
 	Category       string    `json:"category"`
+	Sentiment      string    `json:"sentiment"`
 }
+
+const (
+	NewsSentimentPositive = "positive"
+	NewsSentimentNegative = "negative"
+	NewsSentimentNeutral  = "neutral"
+)
 
 type CompanyInfo struct {
 	Symbol           string   `json:"symbol"`
@@ -123,4 +130,46 @@ type RecommendationData struct {
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+type AITradeStrategy struct {
+	Symbol          string         `json:"symbol"`
+	AnalysisTime    time.Time      `json:"analysisTime"`
+	CurrentPrice    float64        `json:"currentPrice"`
+	Currency        string         `json:"currency"`
+	Signal          string         `json:"signal"`
+	Confidence      int            `json:"confidence"`
+	EntryPrice      PriceRange     `json:"entryPrice"`
+	StopLoss        PriceRange     `json:"stopLoss"`
+	TakeProfit      PriceRange     `json:"takeProfit"`
+	BuyTiming       TimingAnalysis `json:"buyTiming"`
+	SellTiming      TimingAnalysis `json:"sellTiming"`
+	RiskReward      string         `json:"riskReward"`
+	AnalysisBasis   []string       `json:"analysisBasis"`
+	MarketCondition string         `json:"marketCondition"`
+	ShortTermView   string         `json:"shortTermView"`
+	MidTermView     string         `json:"midTermView"`
+	Disclaimer      string         `json:"disclaimer"`
+	Provider        string         `json:"provider"`
+}
+
+type PriceRange struct {
+	Low    float64 `json:"low"`
+	High   float64 `json:"high"`
+	Reason string  `json:"reason"`
+}
+
+type TimingAnalysis struct {
+	Recommendation string   `json:"recommendation"`
+	Timeframe      string   `json:"timeframe"`
+	Conditions     []string `json:"conditions"`
+}
+
+type MarketIndicator struct {
+	Symbol        string  `json:"symbol"`
+	Name          string  `json:"name"`
+	Price         float64 `json:"price"`
+	Change        float64 `json:"change"`
+	ChangePercent float64 `json:"changePercent"`
+	Currency      string  `json:"currency"`
 }
