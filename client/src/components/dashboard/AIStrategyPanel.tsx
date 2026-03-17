@@ -42,17 +42,13 @@ function signalBgColor(signal: string): string {
 function PriceRangeDisplay({ label, range, currency, color }: { label: string; range: PriceRange; currency: string; color: string }) {
   return (
     <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-      <div className="mb-1 text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{label}</div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-sm font-bold" style={{ color }}>
-          {formatPrice(range.low, currency)}
-        </span>
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>~</span>
-        <span className="text-sm font-bold" style={{ color }}>
-          {formatPrice(range.high, currency)}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{label}</span>
+        <span className="text-xs font-bold whitespace-nowrap" style={{ color }}>
+          {formatPrice(range.low, currency)} ~ {formatPrice(range.high, currency)}
         </span>
       </div>
-      <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+      <p className="mt-1.5 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
         {range.reason}
       </p>
     </div>
@@ -125,7 +121,7 @@ function StrategyContent({ strategy }: { strategy: AITradeStrategy }) {
         현재가: <span style={{ color: 'var(--text-primary)' }}>{formatPrice(strategy.currentPrice, cur)}</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="flex flex-col gap-2">
         <PriceRangeDisplay label="진입 가격대" range={strategy.entryPrice} currency={cur} color="var(--accent-cyan)" />
         <PriceRangeDisplay label="손절 가격대" range={strategy.stopLoss} currency={cur} color="var(--negative)" />
         <PriceRangeDisplay label="익절 가격대" range={strategy.takeProfit} currency={cur} color="var(--positive)" />

@@ -365,7 +365,11 @@ func (s *YahooService) GetHistoricalData(ctx context.Context, symbol string, cha
 		return nil, fmt.Errorf("unsupported range: %s", chartRange)
 	}
 
-	u := fmt.Sprintf("%s/%s?range=%s&interval=%s&includePrePost=true", yahooChartURL, url.PathEscape(symbol), rc.Range, rc.Interval)
+	includePrePost := "false"
+	if chartRange == "pre" {
+		includePrePost = "true"
+	}
+	u := fmt.Sprintf("%s/%s?range=%s&interval=%s&includePrePost=%s", yahooChartURL, url.PathEscape(symbol), rc.Range, rc.Interval, includePrePost)
 
 	body, err := s.doRequest(ctx, u)
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 type AIProvider interface {
 	GenerateInsight(ctx context.Context, symbol string, info model.CompanyInfo, news []model.NewsArticle, broadNews []model.NewsArticle, quote model.StockQuote, recommendation *model.RecommendationData) (model.AIInsight, error)
 	GenerateStrategy(ctx context.Context, symbol string, info model.CompanyInfo, news []model.NewsArticle, broadNews []model.NewsArticle, quote model.StockQuote, recommendation *model.RecommendationData, history []model.HistoricalDataPoint) (model.AITradeStrategy, error)
+	AnalyzeSentiment(ctx context.Context, titles []string) ([]string, error)
 	ProviderName() string
 }
 
@@ -310,6 +311,46 @@ func strategyFromResponse(symbol string, parsed strategyResponse, quote model.St
 	}
 }
 
+func buildSentimentPrompt(titles []string) string {
+	var sb strings.Builder
+	sb.WriteString("Analyze the sentiment of each news headline below.\n")
+	sb.WriteString("For each headline, classify as exactly one of: \"positive\", \"negative\", \"neutral\".\n")
+	sb.WriteString("Consider the full context and nuance of each headline — do NOT rely on individual keywords.\n")
+	sb.WriteString("For example, \"상승세 꺾여\" is negative even though it contains \"상승\".\n\n")
+	sb.WriteString("Headlines:\n")
+	for i, t := range titles {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, t))
+	}
+	sb.WriteString("\nRespond ONLY with a JSON array of strings, one per headline, in the same order.\n")
+	sb.WriteString("Example: [\"positive\", \"negative\", \"neutral\"]\n")
+	sb.WriteString("No explanation, no markdown formatting.")
+	return sb.String()
+}
+
+func parseSentimentJSON(raw string, expected int) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+
+	var results []string
+	if err := json.Unmarshal([]byte(raw), &results); err != nil {
+		return nil, fmt.Errorf("parse sentiment JSON: %w", err)
+	}
+	if len(results) != expected {
+		return nil, fmt.Errorf("sentiment count mismatch: got %d, expected %d", len(results), expected)
+	}
+	for i, s := range results {
+		switch s {
+		case model.NewsSentimentPositive, model.NewsSentimentNegative, model.NewsSentimentNeutral:
+		default:
+			results[i] = model.NewsSentimentNeutral
+		}
+	}
+	return results, nil
+}
+
 // AnthropicProvider
 
 type AnthropicProvider struct {
@@ -326,6 +367,34 @@ func NewAnthropicProvider(apiKey string, aiModel string) *AnthropicProvider {
 }
 
 func (p *AnthropicProvider) ProviderName() string { return "anthropic" }
+
+func (p *AnthropicProvider) AnalyzeSentiment(ctx context.Context, titles []string) ([]string, error) {
+	if len(titles) == 0 {
+		return nil, nil
+	}
+	prompt := buildSentimentPrompt(titles)
+
+	message, err := p.client.Messages.New(ctx, anthropic.MessageNewParams{
+		MaxTokens: 1024,
+		Model:     p.model,
+		Messages: []anthropic.MessageParam{
+			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("anthropic sentiment call: %w", err)
+	}
+
+	rawText := ""
+	for _, block := range message.Content {
+		if block.Type == "text" {
+			rawText = block.Text
+			break
+		}
+	}
+
+	return parseSentimentJSON(rawText, len(titles))
+}
 
 func (p *AnthropicProvider) GenerateInsight(ctx context.Context, symbol string, info model.CompanyInfo, news []model.NewsArticle, broadNews []model.NewsArticle, quote model.StockQuote, recommendation *model.RecommendationData) (model.AIInsight, error) {
 	prompt := buildPrompt(symbol, info, news, broadNews, quote, recommendation)
@@ -424,6 +493,29 @@ func NewOpenAIProvider(apiKey string, aiModel string) *OpenAIProvider {
 
 func (p *OpenAIProvider) ProviderName() string { return "openai" }
 
+func (p *OpenAIProvider) AnalyzeSentiment(ctx context.Context, titles []string) ([]string, error) {
+	if len(titles) == 0 {
+		return nil, nil
+	}
+	prompt := buildSentimentPrompt(titles)
+
+	completion, err := p.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Model: p.model,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage(prompt),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("openai sentiment call: %w", err)
+	}
+
+	if len(completion.Choices) == 0 {
+		return nil, fmt.Errorf("empty sentiment response from openai")
+	}
+
+	return parseSentimentJSON(completion.Choices[0].Message.Content, len(titles))
+}
+
 func (p *OpenAIProvider) GenerateInsight(ctx context.Context, symbol string, info model.CompanyInfo, news []model.NewsArticle, broadNews []model.NewsArticle, quote model.StockQuote, recommendation *model.RecommendationData) (model.AIInsight, error) {
 	prompt := buildPrompt(symbol, info, news, broadNews, quote, recommendation)
 
@@ -493,6 +585,10 @@ func (p *OpenAIProvider) GenerateStrategy(ctx context.Context, symbol string, in
 type NoopProvider struct{}
 
 func (p *NoopProvider) ProviderName() string { return "none" }
+
+func (p *NoopProvider) AnalyzeSentiment(_ context.Context, _ []string) ([]string, error) {
+	return nil, fmt.Errorf("AI provider not configured — sentiment analysis will use keyword fallback")
+}
 
 func (p *NoopProvider) GenerateInsight(_ context.Context, symbol string, _ model.CompanyInfo, _ []model.NewsArticle, _ []model.NewsArticle, _ model.StockQuote, _ *model.RecommendationData) (model.AIInsight, error) {
 	return model.AIInsight{}, fmt.Errorf("AI provider not configured — set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env to enable AI insights for %s", symbol)

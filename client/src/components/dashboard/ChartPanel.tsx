@@ -16,9 +16,54 @@ const RANGES: { label: string; value: ChartRange }[] = [
   { label: 'MAX', value: 'max' },
 ]
 
+function isKoreanStock(symbol: string): boolean {
+  return symbol.endsWith('.KS') || symbol.endsWith('.KQ')
+}
+
+function toLocalTimestamp(timestamp: string): Time {
+  const date = new Date(timestamp)
+  const utcSeconds = date.getTime() / 1000
+  const offsetSeconds = -date.getTimezoneOffset() * 60
+  return (utcSeconds + offsetSeconds) as Time
+}
+
+// Interval in seconds for each range
+const RANGE_INTERVAL: Record<string, number> = {
+  'pre': 60,
+  '1d': 300,
+}
+
+// Session duration in seconds
+const SESSION_DURATION: Record<string, Record<string, number>> = {
+  us: { '1d': 6.5 * 3600, 'pre': 5.5 * 3600 },
+  kr: { '1d': 6.5 * 3600, 'pre': 1.5 * 3600 },
+}
+
+function buildWhitespacePoints(symbol: string, range: ChartRange, data: HistoricalDataPoint[]): { time: Time }[] {
+  if (data.length === 0) return []
+  if (range !== '1d' && range !== 'pre') return []
+
+  const market = isKoreanStock(symbol) ? 'kr' : 'us'
+  const duration = SESSION_DURATION[market]?.[range]
+  const interval = RANGE_INTERVAL[range]
+  if (!duration || !interval) return []
+
+  const firstTime = toLocalTimestamp(data[0].timestamp) as number
+  const sessionEnd = firstTime + duration
+  const lastTime = toLocalTimestamp(data[data.length - 1].timestamp) as number
+
+  const points: { time: Time }[] = []
+  let t = lastTime + interval
+  while (t <= sessionEnd) {
+    points.push({ time: t as Time })
+    t += interval
+  }
+  return points
+}
+
 function toCandlestickData(points: HistoricalDataPoint[]): CandlestickData<Time>[] {
   return points.map((p) => ({
-    time: (new Date(p.timestamp).getTime() / 1000) as Time,
+    time: toLocalTimestamp(p.timestamp),
     open: p.open,
     high: p.high,
     low: p.low,
@@ -28,7 +73,7 @@ function toCandlestickData(points: HistoricalDataPoint[]): CandlestickData<Time>
 
 function toVolumeData(points: HistoricalDataPoint[]): HistogramData<Time>[] {
   return points.map((p) => ({
-    time: (new Date(p.timestamp).getTime() / 1000) as Time,
+    time: toLocalTimestamp(p.timestamp),
     value: p.volume,
     color: p.close >= p.open ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)',
   }))
@@ -100,7 +145,6 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
           width: entry.contentRect.width,
           height: entry.contentRect.height,
         })
-        chart.timeScale().fitContent()
       }
     })
     observer.observe(containerRef.current)
@@ -115,12 +159,23 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
   }, [])
 
   useEffect(() => {
-    if (data && candleRef.current && volumeRef.current) {
-      candleRef.current.setData(toCandlestickData(data))
+    if (data && candleRef.current && volumeRef.current && chartRef.current) {
+      const candles = toCandlestickData(data)
+      const whitespace = buildWhitespacePoints(symbol, range, data)
+      candleRef.current.setData([...candles, ...whitespace] as CandlestickData<Time>[])
       volumeRef.current.setData(toVolumeData(data))
-      chartRef.current?.timeScale().fitContent()
+
+      if (whitespace.length > 0) {
+        const from = candles[0].time
+        const to = whitespace[whitespace.length - 1].time
+        chartRef.current.timeScale().applyOptions({ rightOffset: 0 })
+        chartRef.current.timeScale().setVisibleRange({ from, to })
+      } else {
+        chartRef.current.timeScale().applyOptions({ rightOffset: 0 })
+        chartRef.current.timeScale().fitContent()
+      }
     }
-  }, [data])
+  }, [data, symbol, range])
 
   return (
     <div

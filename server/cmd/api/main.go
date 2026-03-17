@@ -42,7 +42,7 @@ func main() {
 	}
 
 	yahooService := service.NewYahooService()
-	newsService := service.NewNewsService(yahooService)
+	newsService := service.NewNewsService(yahooService, aiProvider)
 	watchlistService := service.NewWatchlistService()
 	insightScheduler := service.NewInsightScheduler(aiProvider, yahooService, newsService, watchlistService)
 

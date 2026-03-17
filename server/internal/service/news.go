@@ -21,12 +21,14 @@ const (
 
 type NewsService struct {
 	yahoo  *YahooService
+	ai     AIProvider
 	client *http.Client
 }
 
-func NewNewsService(yahoo *YahooService) *NewsService {
+func NewNewsService(yahoo *YahooService, ai AIProvider) *NewsService {
 	return &NewsService{
 		yahoo:  yahoo,
+		ai:     ai,
 		client: &http.Client{Timeout: 15 * time.Second},
 	}
 }
@@ -102,7 +104,7 @@ func (ns *NewsService) GetAllNews(ctx context.Context, symbol string, sector str
 		allArticles = allArticles[:30]
 	}
 
-	allArticles = applySentiment(allArticles)
+	allArticles = ns.applySentiment(ctx, allArticles)
 
 	slog.Info("fetched aggregated news", "symbol", symbol, "total", len(allArticles))
 	return allArticles, nil
@@ -330,9 +332,24 @@ func analyzeSentiment(title string) string {
 	return model.NewsSentimentNeutral
 }
 
-func applySentiment(articles []model.NewsArticle) []model.NewsArticle {
+func (ns *NewsService) applySentiment(ctx context.Context, articles []model.NewsArticle) []model.NewsArticle {
+	titles := make([]string, len(articles))
+	for i, a := range articles {
+		titles[i] = a.Title
+	}
+
+	sentiments, err := ns.ai.AnalyzeSentiment(ctx, titles)
+	if err != nil {
+		slog.Warn("AI sentiment analysis failed, falling back to keywords", "error", err)
+		for i := range articles {
+			articles[i].Sentiment = analyzeSentiment(articles[i].Title)
+		}
+		return articles
+	}
+
+	slog.Info("AI sentiment analysis completed", "count", len(sentiments))
 	for i := range articles {
-		articles[i].Sentiment = analyzeSentiment(articles[i].Title)
+		articles[i].Sentiment = sentiments[i]
 	}
 	return articles
 }

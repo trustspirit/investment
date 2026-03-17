@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useMatch } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search, TrendingUp, Trash2, Menu, X } from 'lucide-react'
 import { useWatchlist } from '../../hooks'
@@ -45,19 +45,19 @@ function WatchlistEntry({ item, isActive, onSelect, onRemove }: {
   onRemove: () => void
 }) {
   return (
-    <li className="group flex items-center">
+    <li className="group relative">
       <button
         onClick={onSelect}
-        className="flex flex-1 cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
+        className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
         style={{
-          backgroundColor: isActive ? 'rgba(34, 211, 238, 0.1)' : 'transparent',
+          backgroundColor: isActive ? 'rgba(34, 211, 238, 0.12)' : 'transparent',
           border: 'none',
-          color: isActive ? 'var(--accent-cyan)' : 'var(--text-primary)',
+          color: isActive ? '#22d3ee' : 'var(--text-primary)',
         }}
       >
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{item.symbol}</div>
-          <div className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+          <div className="truncate text-sm font-semibold">{item.symbol}</div>
+          <div className="truncate text-xs" style={{ color: isActive ? 'rgba(34, 211, 238, 0.7)' : 'var(--text-muted)' }}>
             {item.name}
           </div>
         </div>
@@ -68,9 +68,9 @@ function WatchlistEntry({ item, isActive, onSelect, onRemove }: {
           e.stopPropagation()
           onRemove()
         }}
-        className="mr-1 cursor-pointer rounded p-1.5 opacity-0 transition-opacity group-hover:opacity-100"
+        className="absolute right-1 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1.5 opacity-0 transition-opacity group-hover:opacity-100"
         style={{
-          backgroundColor: 'transparent',
+          backgroundColor: 'var(--bg-secondary)',
           border: 'none',
           color: 'var(--text-muted)',
         }}
@@ -85,7 +85,8 @@ export default function Sidebar() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(true)
   const navigate = useNavigate()
-  const { symbol: activeSymbol } = useParams<{ symbol: string }>()
+  const match = useMatch('/stock/:symbol')
+  const activeSymbol = match?.params.symbol
   const { watchlist, removeFromWatchlist } = useWatchlist()
 
   return (
