@@ -15,7 +15,7 @@ import (
 	ws "github.com/shinyoung/investment/internal/ws"
 )
 
-const kisWSURL = "wss://ops.koreainvestment.com:21000"
+const kisWSURL = "ws://ops.koreainvestment.com:21000"
 
 type KISWebSocket struct {
 	auth       *KISAuth
