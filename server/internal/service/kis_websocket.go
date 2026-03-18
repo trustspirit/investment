@@ -136,7 +136,7 @@ func (k *KISWebSocket) readLoop(ctx context.Context, approvalKey string) {
 			select {
 			case msgCh <- msg:
 			default:
-				// Drop message if buffer full rather than block the read goroutine
+				slog.Warn("KIS WS message buffer full, dropping tick")
 			}
 		}
 	}()

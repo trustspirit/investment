@@ -51,14 +51,23 @@ func (h *Hub) Run() {
 			}
 			h.mu.Unlock()
 
+			var emptied []string
 			h.subMu.Lock()
 			for symbol, clients := range h.subs {
 				delete(clients, client)
 				if len(clients) == 0 {
 					delete(h.subs, symbol)
+					emptied = append(emptied, symbol)
 				}
 			}
 			h.subMu.Unlock()
+
+			for _, sym := range emptied {
+				select {
+				case h.SymbolEvents <- SymbolEvent{Symbol: sym, Subscribe: false}:
+				default:
+				}
+			}
 			slog.Info("websocket client disconnected", "clients", len(h.clients))
 		}
 	}
