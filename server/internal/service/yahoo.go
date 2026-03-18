@@ -302,15 +302,14 @@ func (s *YahooService) GetQuote(ctx context.Context, symbol string) (model.Stock
 		QuoteSummary struct {
 			Result []struct {
 				Price struct {
-					ShortName                  string                `json:"shortName"`
-					Currency                   string                `json:"currency"`
-					RegularMarketPrice         struct{ Raw float64 } `json:"regularMarketPrice"`
-					RegularMarketChange        struct{ Raw float64 } `json:"regularMarketChange"`
-					RegularMarketChangePercent struct{ Raw float64 } `json:"regularMarketChangePercent"`
-					RegularMarketVolume        struct{ Raw int64 }   `json:"regularMarketVolume"`
-					MarketCap                  struct{ Raw int64 }   `json:"marketCap"`
-					PreMarketPrice             struct{ Raw float64 } `json:"preMarketPrice"`
-					PostMarketPrice            struct{ Raw float64 } `json:"postMarketPrice"`
+					ShortName           string                `json:"shortName"`
+					Currency            string                `json:"currency"`
+					RegularMarketPrice  struct{ Raw float64 } `json:"regularMarketPrice"`
+					RegularMarketOpen   struct{ Raw float64 } `json:"regularMarketOpen"`
+					RegularMarketVolume struct{ Raw int64 }   `json:"regularMarketVolume"`
+					MarketCap           struct{ Raw int64 }   `json:"marketCap"`
+					PreMarketPrice      struct{ Raw float64 } `json:"preMarketPrice"`
+					PostMarketPrice     struct{ Raw float64 } `json:"postMarketPrice"`
 				} `json:"price"`
 			} `json:"result"`
 			Error *struct {
@@ -336,12 +335,19 @@ func (s *YahooService) GetQuote(ctx context.Context, symbol string) (model.Stock
 	if currency == "" {
 		currency = "USD"
 	}
+	currentPrice := p.RegularMarketPrice.Raw
+	openPrice := p.RegularMarketOpen.Raw
+	change := currentPrice - openPrice
+	changePct := 0.0
+	if openPrice != 0 {
+		changePct = (change / openPrice) * 100
+	}
 	quote := model.StockQuote{
 		Symbol:        symbol,
 		Name:          p.ShortName,
-		Price:         p.RegularMarketPrice.Raw,
-		Change:        p.RegularMarketChange.Raw,
-		ChangePercent: p.RegularMarketChangePercent.Raw,
+		Price:         currentPrice,
+		Change:        change,
+		ChangePercent: changePct,
 		Volume:        p.RegularMarketVolume.Raw,
 		MarketCap:     p.MarketCap.Raw,
 		Currency:      currency,
@@ -766,6 +772,7 @@ func (s *YahooService) GetMarketIndicators(ctx context.Context) ([]model.MarketI
 				Result []struct {
 					Meta struct {
 						RegularMarketPrice float64 `json:"regularMarketPrice"`
+						RegularMarketOpen  float64 `json:"regularMarketOpen"`
 						ChartPreviousClose float64 `json:"chartPreviousClose"`
 						Currency           string  `json:"currency"`
 					} `json:"meta"`
@@ -783,10 +790,14 @@ func (s *YahooService) GetMarketIndicators(ctx context.Context) ([]model.MarketI
 		}
 
 		meta := resp.Chart.Result[0].Meta
-		change := meta.RegularMarketPrice - meta.ChartPreviousClose
+		basePrice := meta.RegularMarketOpen
+		if basePrice == 0 {
+			basePrice = meta.ChartPreviousClose
+		}
+		change := meta.RegularMarketPrice - basePrice
 		changePct := 0.0
-		if meta.ChartPreviousClose != 0 {
-			changePct = (change / meta.ChartPreviousClose) * 100
+		if basePrice != 0 {
+			changePct = (change / basePrice) * 100
 		}
 
 		currency := meta.Currency

@@ -11,7 +11,7 @@ import (
 const (
 	ProviderAnthropic = "anthropic"
 	ProviderOpenAI    = "openai"
-	defaultPort       = "8081"
+	defaultPort       = "50239"
 
 	defaultAnthropicModel = "claude-sonnet-4-20250514"
 	defaultOpenAIModel    = "gpt-4o"
