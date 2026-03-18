@@ -54,7 +54,10 @@ func (k *KISService) doKISRequestOnce(ctx context.Context, path string, params m
 		return nil, 0, fmt.Errorf("get KIS token: %w", err)
 	}
 
-	u, _ := url.Parse(kisBaseURL + path)
+	u, err := url.Parse(kisBaseURL + path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("build KIS URL: %w", err)
+	}
 	q := u.Query()
 	for key, val := range params {
 		q.Set(key, val)
@@ -201,7 +204,15 @@ func (k *KISService) getDailyData(ctx context.Context, symbol string, chartRange
 
 	code := StripKRXSuffix(symbol)
 	endDate := time.Now().Format("20060102")
-	startDate := time.Now().AddDate(0, 0, -rc.count*2).Format("20060102")
+	var startDate string
+	switch rc.periodDivCode {
+	case "W":
+		startDate = time.Now().AddDate(0, 0, -(rc.count*7*2)).Format("20060102")
+	case "M":
+		startDate = time.Now().AddDate(0, -(rc.count*2), 0).Format("20060102")
+	default:
+		startDate = time.Now().AddDate(0, 0, -(rc.count*2)).Format("20060102")
+	}
 
 	body, err := k.doKISRequest(ctx, "/uapi/domestic-stock/v1/quotations/inquire-daily-price", map[string]string{
 		"FID_COND_MRKT_DIV_CODE": "J",
