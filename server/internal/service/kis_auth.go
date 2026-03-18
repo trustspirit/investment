@@ -13,6 +13,7 @@ import (
 const kisBaseURL = "https://openapi.koreainvestment.com:9443"
 
 type KISAuth struct {
+	// appKey, appSecret, and baseURL are immutable after construction — safe to read without locking.
 	appKey      string
 	appSecret   string
 	baseURL     string
@@ -63,11 +64,14 @@ func (a *KISAuth) ForceRenewToken(ctx context.Context) error {
 }
 
 func (a *KISAuth) fetchToken(ctx context.Context) (string, error) {
-	body, _ := json.Marshal(map[string]string{
+	body, err := json.Marshal(map[string]string{
 		"grant_type": "client_credentials",
 		"appkey":     a.appKey,
 		"appsecret":  a.appSecret,
 	})
+	if err != nil {
+		return "", fmt.Errorf("marshal request body: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/oauth2/tokenP", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("build token request: %w", err)
@@ -79,6 +83,10 @@ func (a *KISAuth) fetchToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("fetch KIS token: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("KIS token endpoint returned HTTP %d", resp.StatusCode)
+	}
 
 	var result struct {
 		AccessToken string `json:"access_token"`
@@ -105,11 +113,14 @@ func (a *KISAuth) GetWSApprovalKey(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	body, _ := json.Marshal(map[string]string{
+	body, err := json.Marshal(map[string]string{
 		"grant_type": "client_credentials",
 		"appkey":     a.appKey,
 		"appsecret":  a.appSecret,
 	})
+	if err != nil {
+		return "", fmt.Errorf("marshal request body: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/oauth2/Approval", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("build WS approval request: %w", err)
@@ -122,6 +133,10 @@ func (a *KISAuth) GetWSApprovalKey(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("fetch WS approval key: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("KIS WS approval endpoint returned HTTP %d", resp.StatusCode)
+	}
 
 	var result struct {
 		ApprovalKey string `json:"approval_key"`
