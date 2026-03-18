@@ -42,8 +42,13 @@ func (k *KISService) doKISRequest(ctx context.Context, path string, params map[s
 		if renewErr := k.auth.ForceRenewToken(ctx); renewErr != nil {
 			return nil, fmt.Errorf("renew KIS token: %w", renewErr)
 		}
-		body, _, err = k.doKISRequestOnce(ctx, path, params, trID)
-		return body, err
+		body, statusCode, err = k.doKISRequestOnce(ctx, path, params, trID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("KIS %s returned HTTP %d", path, statusCode)
 	}
 	return body, nil
 }
@@ -137,54 +142,72 @@ func (k *KISService) GetHistoricalData(ctx context.Context, symbol string, chart
 
 func (k *KISService) getIntradayData(ctx context.Context, symbol string) ([]model.HistoricalDataPoint, error) {
 	code := StripKRXSuffix(symbol)
-	inputHour := time.Now().Format("150405")
-
-	body, err := k.doKISRequest(ctx, "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice", map[string]string{
-		"FID_ETC_CLS_CODE":       "0",
-		"FID_COND_MRKT_DIV_CODE": "J",
-		"FID_INPUT_ISCD":         code,
-		"FID_INPUT_HOUR_1":       inputHour,
-		"FID_PW_DATA_INCU_YN":    "Y",
-	}, "FHKST03010200")
-	if err != nil {
-		return nil, fmt.Errorf("KIS intraday %s: %w", symbol, err)
-	}
-
-	var resp struct {
-		Output2 []struct {
-			Hour     string `json:"stck_cntg_hour"`
-			StckOprc string `json:"stck_oprc"`
-			StckHgpr string `json:"stck_hgpr"`
-			StckLwpr string `json:"stck_lwpr"`
-			StckPrpr string `json:"stck_prpr"`
-			CntgVol  string `json:"cntg_vol"`
-		} `json:"output2"`
-	}
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("parse KIS intraday: %w", err)
-	}
-
 	today := time.Now().Format("20060102")
-	points := make([]model.HistoricalDataPoint, 0, len(resp.Output2))
-	for _, item := range resp.Output2 {
-		t, err := time.ParseInLocation("20060102150405", today+item.Hour, time.Local)
+	cursor := time.Now().Format("150405")
+
+	var allPoints []model.HistoricalDataPoint
+
+	// KIS returns ~30 records per call; paginate backwards to get full day from 09:00
+	for i := 0; i < 15; i++ { // max 15 pages (~450 minutes, covers full trading day)
+		body, err := k.doKISRequest(ctx, "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice", map[string]string{
+			"FID_ETC_CLS_CODE":       "0",
+			"FID_COND_MRKT_DIV_CODE": "J",
+			"FID_INPUT_ISCD":         code,
+			"FID_INPUT_HOUR_1":       cursor,
+			"FID_PW_DATA_INCU_YN":    "Y",
+		}, "FHKST03010200")
 		if err != nil {
-			continue
+			if i > 0 {
+				break // partial data is better than no data
+			}
+			return nil, fmt.Errorf("KIS intraday %s: %w", symbol, err)
 		}
-		points = append(points, model.HistoricalDataPoint{
-			Timestamp: t,
-			Open:      parseKISFloat(item.StckOprc),
-			High:      parseKISFloat(item.StckHgpr),
-			Low:       parseKISFloat(item.StckLwpr),
-			Close:     parseKISFloat(item.StckPrpr),
-			Volume:    parseKISInt64(item.CntgVol),
-		})
+
+		var resp struct {
+			Output2 []struct {
+				Hour     string `json:"stck_cntg_hour"`
+				StckOprc string `json:"stck_oprc"`
+				StckHgpr string `json:"stck_hgpr"`
+				StckLwpr string `json:"stck_lwpr"`
+				StckPrpr string `json:"stck_prpr"`
+				CntgVol  string `json:"cntg_vol"`
+			} `json:"output2"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			break
+		}
+		if len(resp.Output2) == 0 {
+			break
+		}
+
+		for _, item := range resp.Output2 {
+			t, err := time.ParseInLocation("20060102150405", today+item.Hour, time.Local)
+			if err != nil {
+				continue
+			}
+			allPoints = append(allPoints, model.HistoricalDataPoint{
+				Timestamp: t,
+				Open:      parseKISFloat(item.StckOprc),
+				High:      parseKISFloat(item.StckHgpr),
+				Low:       parseKISFloat(item.StckLwpr),
+				Close:     parseKISFloat(item.StckPrpr),
+				Volume:    parseKISInt64(item.CntgVol),
+			})
+		}
+
+		// Use the oldest time from this batch as the next cursor
+		oldest := resp.Output2[len(resp.Output2)-1].Hour
+		if oldest >= cursor {
+			break // no progress, avoid infinite loop
+		}
+		cursor = oldest
 	}
+
 	// KIS returns newest-first; reverse to oldest-first (matching chart expectation)
-	for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
-		points[i], points[j] = points[j], points[i]
+	for i, j := 0, len(allPoints)-1; i < j; i, j = i+1, j-1 {
+		allPoints[i], allPoints[j] = allPoints[j], allPoints[i]
 	}
-	return points, nil
+	return allPoints, nil
 }
 
 type kisDateRange struct {
