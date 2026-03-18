@@ -44,10 +44,30 @@ func main() {
 	yahooService := service.NewYahooService()
 	newsService := service.NewNewsService(yahooService, aiProvider)
 	watchlistService := service.NewWatchlistService()
-	insightScheduler := service.NewInsightScheduler(aiProvider, yahooService, newsService, watchlistService)
 
 	appCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	hub := ws.NewHub()
+	go hub.Run()
+
+	// KIS setup — conditional on credentials
+	var kisWS *service.KISWebSocket
+	var stocks *service.StockService
+
+	if cfg.KISAppKey != "" && cfg.KISAppSecret != "" {
+		kisAuth := service.NewKISAuth(cfg.KISAppKey, cfg.KISAppSecret)
+		kisWS = service.NewKISWebSocket(kisAuth, hub)
+		kis := service.NewKISService(kisAuth, yahooService)
+		stocks = service.NewStockService(yahooService, kis)
+		kisWS.Start(appCtx)
+		slog.Info("KIS real-time enabled for Korean stocks")
+	} else {
+		slog.Warn("KIS credentials missing — Korean stocks will use Yahoo (20-min delay)")
+		stocks = service.NewStockService(yahooService, nil)
+	}
+
+	insightScheduler := service.NewInsightScheduler(aiProvider, stocks, newsService, watchlistService)
 
 	if err := insightScheduler.Start(appCtx); err != nil {
 		slog.Error("failed to start insight scheduler", "error", err)
@@ -55,13 +75,10 @@ func main() {
 	}
 	defer insightScheduler.Stop()
 
-	hub := ws.NewHub()
-	go hub.Run()
-
-	priceStreamer := service.NewPriceStreamer(hub, yahooService)
+	priceStreamer := service.NewPriceStreamer(hub, stocks, kisWS)
 	priceStreamer.Start(appCtx)
 
-	stockHandler := handler.NewStockHandler(yahooService, newsService)
+	stockHandler := handler.NewStockHandler(stocks, newsService)
 	watchlistHandler := handler.NewWatchlistHandler(watchlistService)
 	insightHandler := handler.NewInsightHandler(insightScheduler)
 

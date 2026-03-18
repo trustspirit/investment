@@ -14,16 +14,16 @@ import (
 type InsightScheduler struct {
 	cache     sync.Map
 	ai        AIProvider
-	yahoo     *YahooService
+	stocks    *StockService
 	news      *NewsService
 	watchlist *WatchlistService
 	scheduler gocron.Scheduler
 }
 
-func NewInsightScheduler(ai AIProvider, yahoo *YahooService, news *NewsService, watchlist *WatchlistService) *InsightScheduler {
+func NewInsightScheduler(ai AIProvider, stocks *StockService, news *NewsService, watchlist *WatchlistService) *InsightScheduler {
 	return &InsightScheduler{
 		ai:        ai,
-		yahoo:     yahoo,
+		stocks:    stocks,
 		news:      news,
 		watchlist: watchlist,
 	}
@@ -92,18 +92,18 @@ func (is *InsightScheduler) refreshAll(ctx context.Context) {
 }
 
 func (is *InsightScheduler) GenerateStrategyForSymbol(ctx context.Context, symbol string) (model.AITradeStrategy, error) {
-	quote, err := is.yahoo.GetQuote(ctx, symbol)
+	quote, err := is.stocks.GetQuote(ctx, symbol)
 	if err != nil {
 		return model.AITradeStrategy{}, err
 	}
 
-	info, err := is.yahoo.GetCompanyInfo(ctx, symbol)
+	info, err := is.stocks.GetCompanyInfo(ctx, symbol)
 	if err != nil {
 		slog.Warn("failed to get company info for strategy", "symbol", symbol, "error", err)
 		info = model.CompanyInfo{Symbol: symbol, Name: quote.Name}
 	}
 
-	companyNews, err := is.yahoo.GetNews(ctx, symbol)
+	companyNews, err := is.stocks.GetNews(ctx, symbol)
 	if err != nil {
 		slog.Warn("failed to get news for strategy", "symbol", symbol, "error", err)
 		companyNews = nil
@@ -112,14 +112,14 @@ func (is *InsightScheduler) GenerateStrategyForSymbol(ctx context.Context, symbo
 	broadNews := is.news.GetBroadNews(ctx, symbol, info.Sector, info.Industry)
 
 	var recommendation *model.RecommendationData
-	rec, err := is.yahoo.GetRecommendation(ctx, symbol)
+	rec, err := is.stocks.GetRecommendation(ctx, symbol)
 	if err != nil {
 		slog.Warn("failed to get recommendation for strategy", "symbol", symbol, "error", err)
 	} else {
 		recommendation = &rec
 	}
 
-	history, err := is.yahoo.GetHistoricalData(ctx, symbol, "1mo")
+	history, err := is.stocks.GetHistoricalData(ctx, symbol, "1mo")
 	if err != nil {
 		slog.Warn("failed to get historical data for strategy", "symbol", symbol, "error", err)
 		history = nil
@@ -129,18 +129,18 @@ func (is *InsightScheduler) GenerateStrategyForSymbol(ctx context.Context, symbo
 }
 
 func (is *InsightScheduler) generateInsight(ctx context.Context, symbol string) (model.AIInsight, error) {
-	quote, err := is.yahoo.GetQuote(ctx, symbol)
+	quote, err := is.stocks.GetQuote(ctx, symbol)
 	if err != nil {
 		return model.AIInsight{}, err
 	}
 
-	info, err := is.yahoo.GetCompanyInfo(ctx, symbol)
+	info, err := is.stocks.GetCompanyInfo(ctx, symbol)
 	if err != nil {
 		slog.Warn("failed to get company info for insight", "symbol", symbol, "error", err)
 		info = model.CompanyInfo{Symbol: symbol, Name: quote.Name}
 	}
 
-	companyNews, err := is.yahoo.GetNews(ctx, symbol)
+	companyNews, err := is.stocks.GetNews(ctx, symbol)
 	if err != nil {
 		slog.Warn("failed to get news for insight", "symbol", symbol, "error", err)
 		companyNews = nil
@@ -149,7 +149,7 @@ func (is *InsightScheduler) generateInsight(ctx context.Context, symbol string) 
 	broadNews := is.news.GetBroadNews(ctx, symbol, info.Sector, info.Industry)
 
 	var recommendation *model.RecommendationData
-	rec, err := is.yahoo.GetRecommendation(ctx, symbol)
+	rec, err := is.stocks.GetRecommendation(ctx, symbol)
 	if err != nil {
 		slog.Warn("failed to get recommendation for insight", "symbol", symbol, "error", err)
 	} else {

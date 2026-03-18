@@ -13,12 +13,12 @@ import (
 )
 
 type StockHandler struct {
-	yahoo *service.YahooService
-	news  *service.NewsService
+	stocks *service.StockService
+	news   *service.NewsService
 }
 
-func NewStockHandler(yahoo *service.YahooService, news *service.NewsService) *StockHandler {
-	return &StockHandler{yahoo: yahoo, news: news}
+func NewStockHandler(stocks *service.StockService, news *service.NewsService) *StockHandler {
+	return &StockHandler{stocks: stocks, news: news}
 }
 
 func (h *StockHandler) Search(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +28,7 @@ func (h *StockHandler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results, err := h.yahoo.SearchSymbol(r.Context(), query)
+	results, err := h.stocks.SearchSymbol(r.Context(), query)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -44,7 +44,7 @@ func (h *StockHandler) GetQuote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	quote, err := h.yahoo.GetQuote(r.Context(), symbol)
+	quote, err := h.stocks.GetQuote(r.Context(), symbol)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -65,7 +65,7 @@ func (h *StockHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 		chartRange = "1d"
 	}
 
-	points, err := h.yahoo.GetHistoricalData(r.Context(), symbol, chartRange)
+	points, err := h.stocks.GetHistoricalData(r.Context(), symbol, chartRange)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if strings.Contains(err.Error(), "unsupported range") {
@@ -85,7 +85,7 @@ func (h *StockHandler) GetInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := h.yahoo.GetCompanyInfo(r.Context(), symbol)
+	info, err := h.stocks.GetCompanyInfo(r.Context(), symbol)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -101,7 +101,7 @@ func (h *StockHandler) GetRecommendation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	rec, err := h.yahoo.GetRecommendation(r.Context(), symbol)
+	rec, err := h.stocks.GetRecommendation(r.Context(), symbol)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -118,7 +118,7 @@ func (h *StockHandler) GetNews(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sector, industry string
-	info, err := h.yahoo.GetCompanyInfo(r.Context(), symbol)
+	info, err := h.stocks.GetCompanyInfo(r.Context(), symbol)
 	if err != nil {
 		slog.Warn("failed to get company info for news context", "symbol", symbol, "error", err)
 	} else {
@@ -136,7 +136,7 @@ func (h *StockHandler) GetNews(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *StockHandler) GetMarketIndicators(w http.ResponseWriter, r *http.Request) {
-	indicators, err := h.yahoo.GetMarketIndicators(r.Context())
+	indicators, err := h.stocks.GetMarketIndicators(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
