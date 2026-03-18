@@ -144,21 +144,23 @@ func (k *KISService) getIntradayData(ctx context.Context, symbol string) ([]mode
 	code := StripKRXSuffix(symbol)
 	today := time.Now().Format("20060102")
 	cursor := time.Now().Format("150405")
+	marketOpen := "090000"
 
 	var allPoints []model.HistoricalDataPoint
+	seen := make(map[string]bool) // deduplicate by hour
 
-	// KIS returns ~30 records per call; paginate backwards to get full day from 09:00
-	for i := 0; i < 15; i++ { // max 15 pages (~450 minutes, covers full trading day)
+	// KIS returns ~30 records per call; paginate backwards to 09:00
+	for i := 0; i < 15; i++ {
 		body, err := k.doKISRequest(ctx, "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice", map[string]string{
 			"FID_ETC_CLS_CODE":       "0",
 			"FID_COND_MRKT_DIV_CODE": "J",
 			"FID_INPUT_ISCD":         code,
 			"FID_INPUT_HOUR_1":       cursor,
-			"FID_PW_DATA_INCU_YN":    "Y",
+			"FID_PW_DATA_INCU_YN":    "N",
 		}, "FHKST03010200")
 		if err != nil {
 			if i > 0 {
-				break // partial data is better than no data
+				break
 			}
 			return nil, fmt.Errorf("KIS intraday %s: %w", symbol, err)
 		}
@@ -180,7 +182,16 @@ func (k *KISService) getIntradayData(ctx context.Context, symbol string) ([]mode
 			break
 		}
 
+		reachedOpen := false
 		for _, item := range resp.Output2 {
+			if item.Hour < marketOpen {
+				reachedOpen = true
+				continue
+			}
+			if seen[item.Hour] {
+				continue
+			}
+			seen[item.Hour] = true
 			t, err := time.ParseInLocation("20060102150405", today+item.Hour, time.Local)
 			if err != nil {
 				continue
@@ -195,15 +206,18 @@ func (k *KISService) getIntradayData(ctx context.Context, symbol string) ([]mode
 			})
 		}
 
-		// Use the oldest time from this batch as the next cursor
+		if reachedOpen {
+			break
+		}
+
 		oldest := resp.Output2[len(resp.Output2)-1].Hour
 		if oldest >= cursor {
-			break // no progress, avoid infinite loop
+			break
 		}
 		cursor = oldest
 	}
 
-	// KIS returns newest-first; reverse to oldest-first (matching chart expectation)
+	// KIS returns newest-first; reverse to oldest-first
 	for i, j := 0, len(allPoints)-1; i < j; i, j = i+1, j-1 {
 		allPoints[i], allPoints[j] = allPoints[j], allPoints[i]
 	}
