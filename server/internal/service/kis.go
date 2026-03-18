@@ -180,6 +180,10 @@ func (k *KISService) getIntradayData(ctx context.Context, symbol string) ([]mode
 			Volume:    parseKISInt64(item.CntgVol),
 		})
 	}
+	// KIS returns newest-first; reverse to oldest-first (matching chart expectation)
+	for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
+		points[i], points[j] = points[j], points[i]
+	}
 	return points, nil
 }
 

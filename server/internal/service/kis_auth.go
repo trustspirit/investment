@@ -109,14 +109,10 @@ func (a *KISAuth) fetchToken(ctx context.Context) (string, error) {
 
 // GetWSApprovalKey fetches a fresh WebSocket approval key.
 func (a *KISAuth) GetWSApprovalKey(ctx context.Context) (string, error) {
-	tok, err := a.GetToken(ctx)
-	if err != nil {
-		return "", err
-	}
 	body, err := json.Marshal(map[string]string{
 		"grant_type": "client_credentials",
 		"appkey":     a.appKey,
-		"appsecret":  a.appSecret,
+		"secretkey":  a.appSecret,
 	})
 	if err != nil {
 		return "", fmt.Errorf("marshal request body: %w", err)
@@ -126,7 +122,6 @@ func (a *KISAuth) GetWSApprovalKey(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("build WS approval request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+tok)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -134,15 +129,14 @@ func (a *KISAuth) GetWSApprovalKey(ctx context.Context) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("KIS WS approval endpoint returned HTTP %d", resp.StatusCode)
-	}
-
 	var result struct {
 		ApprovalKey string `json:"approval_key"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode approval key response: %w", err)
+		return "", fmt.Errorf("decode approval key response (HTTP %d): %w", resp.StatusCode, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("KIS WS approval endpoint returned HTTP %d (body: %+v)", resp.StatusCode, result)
 	}
 	if result.ApprovalKey == "" {
 		return "", fmt.Errorf("empty approval_key from KIS")
