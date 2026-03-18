@@ -818,9 +818,3 @@ func (s *YahooService) GetMarketIndicators(ctx context.Context) ([]model.MarketI
 	return indicators, nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
