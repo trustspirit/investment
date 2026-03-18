@@ -59,12 +59,23 @@ func main() {
 		kisAuth := service.NewKISAuth(cfg.KISAppKey, cfg.KISAppSecret)
 		kisWS = service.NewKISWebSocket(kisAuth, hub)
 		kis := service.NewKISService(kisAuth, yahooService)
+		kis.SetWebSocket(kisWS)
 		stocks = service.NewStockService(yahooService, kis)
 		kisWS.Start(appCtx)
 		slog.Info("KIS real-time enabled for Korean stocks")
 	} else {
 		slog.Warn("KIS credentials missing — Korean stocks will use Yahoo (20-min delay)")
 		stocks = service.NewStockService(yahooService, nil)
+	}
+
+	// Finnhub setup — conditional on API key
+	var finnhubWS *service.FinnhubWebSocket
+	if cfg.FinnhubAPIKey != "" {
+		finnhubWS = service.NewFinnhubWebSocket(cfg.FinnhubAPIKey, hub)
+		finnhubWS.Start(appCtx)
+		slog.Info("Finnhub real-time enabled for US stocks")
+	} else {
+		slog.Warn("FINNHUB_API_KEY missing — US stocks will use Yahoo polling (5s delay)")
 	}
 
 	insightScheduler := service.NewInsightScheduler(aiProvider, stocks, newsService, watchlistService)
@@ -75,7 +86,7 @@ func main() {
 	}
 	defer insightScheduler.Stop()
 
-	priceStreamer := service.NewPriceStreamer(hub, stocks, kisWS)
+	priceStreamer := service.NewPriceStreamer(hub, stocks, kisWS, finnhubWS)
 	priceStreamer.Start(appCtx)
 
 	stockHandler := handler.NewStockHandler(stocks, newsService)

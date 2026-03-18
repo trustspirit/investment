@@ -33,31 +33,78 @@ const RANGE_INTERVAL: Record<string, number> = {
   '1d': 300,
 }
 
-// Session duration in seconds
+// Session duration in seconds for each market & range
 const SESSION_DURATION: Record<string, Record<string, number>> = {
+  kr: { '1d': 6.5 * 3600, 'pre': 0.5 * 3600 },
   us: { '1d': 6.5 * 3600, 'pre': 5.5 * 3600 },
-  kr: { '1d': 6.5 * 3600, 'pre': 1.5 * 3600 },
+}
+
+// Korean market absolute hours including overtime (08:00-20:00)
+const KR_MARKET_HOURS: Record<string, { open: [number, number]; close: [number, number] }> = {
+  '1d': { open: [8, 0], close: [20, 0] },
+}
+
+function getSessionBounds(symbol: string, range: ChartRange, data: HistoricalDataPoint[]): { start: number; end: number } | null {
+  if (data.length === 0) return null
+  if (range !== '1d' && range !== 'pre') return null
+
+  const isKR = isKoreanStock(symbol)
+
+  if (isKR) {
+    // Korean stocks: use absolute KST market hours
+    const hours = KR_MARKET_HOURS[range]
+    if (!hours) return null
+    const refDate = new Date(data[0].timestamp)
+    const openDate = new Date(refDate)
+    openDate.setHours(hours.open[0], hours.open[1], 0, 0)
+    const closeDate = new Date(refDate)
+    closeDate.setHours(hours.close[0], hours.close[1], 0, 0)
+    const offsetSeconds = -openDate.getTimezoneOffset() * 60
+    return {
+      start: openDate.getTime() / 1000 + offsetSeconds,
+      end: closeDate.getTime() / 1000 + offsetSeconds,
+    }
+  }
+
+  // Non-Korean stocks: use first data point + session duration
+  const duration = SESSION_DURATION['us']?.[range]
+  if (!duration) return null
+  const firstTime = toLocalTimestamp(data[0].timestamp) as number
+  return {
+    start: firstTime,
+    end: firstTime + duration,
+  }
 }
 
 function buildWhitespacePoints(symbol: string, range: ChartRange, data: HistoricalDataPoint[]): { time: Time }[] {
   if (data.length === 0) return []
   if (range !== '1d' && range !== 'pre') return []
 
-  const market = isKoreanStock(symbol) ? 'kr' : 'us'
-  const duration = SESSION_DURATION[market]?.[range]
   const interval = RANGE_INTERVAL[range]
-  if (!duration || !interval) return []
+  if (!interval) return []
+
+  const bounds = getSessionBounds(symbol, range, data)
+  if (!bounds) return []
 
   const firstTime = toLocalTimestamp(data[0].timestamp) as number
-  const sessionEnd = firstTime + duration
   const lastTime = toLocalTimestamp(data[data.length - 1].timestamp) as number
 
   const points: { time: Time }[] = []
-  let t = lastTime + interval
-  while (t <= sessionEnd) {
+
+  // Pre-data whitespace (e.g. 08:00 → 09:00 for Korean stocks)
+  let t = bounds.start
+  while (t < firstTime) {
     points.push({ time: t as Time })
     t += interval
   }
+
+  // Post-data whitespace (e.g. 15:30 → 20:00 for Korean stocks)
+  t = lastTime + interval
+  while (t <= bounds.end) {
+    points.push({ time: t as Time })
+    t += interval
+  }
+
   return points
 }
 
@@ -95,6 +142,7 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
     if (!containerRef.current) return
 
     const chart = createChart(containerRef.current, {
+      autoSize: true,
       layout: {
         background: { color: 'transparent' },
         textColor: '#8888a0',
@@ -138,13 +186,10 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
     candleRef.current = candleSeries
     volumeRef.current = volumeSeries
 
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (entry) {
-        chart.applyOptions({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        })
+    const observer = new ResizeObserver(() => {
+      if (containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect()
+        chart.applyOptions({ width, height })
       }
     })
     observer.observe(containerRef.current)
@@ -165,11 +210,13 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
       candleRef.current.setData([...candles, ...whitespace] as CandlestickData<Time>[])
       volumeRef.current.setData(toVolumeData(data))
 
-      if (whitespace.length > 0) {
-        const from = candles[0].time
-        const to = whitespace[whitespace.length - 1].time
+      const bounds = getSessionBounds(symbol, range, data)
+      if (bounds) {
         chartRef.current.timeScale().applyOptions({ rightOffset: 0 })
-        chartRef.current.timeScale().setVisibleRange({ from, to })
+        chartRef.current.timeScale().setVisibleRange({
+          from: bounds.start as Time,
+          to: bounds.end as Time,
+        })
       } else {
         chartRef.current.timeScale().applyOptions({ rightOffset: 0 })
         chartRef.current.timeScale().fitContent()
@@ -183,7 +230,7 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
       style={{ borderBottom: '1px solid var(--border)' }}
     >
       <div className="flex flex-wrap gap-1 px-4 py-3 lg:px-6">
-        {RANGES.map((r) => (
+        {RANGES.filter((r) => !(r.value === 'pre' && isKoreanStock(symbol))).map((r) => (
           <button
             key={r.value}
             onClick={() => setRange(r.value)}

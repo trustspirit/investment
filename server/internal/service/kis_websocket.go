@@ -17,6 +17,14 @@ import (
 
 const kisWSURL = "ws://ops.koreainvestment.com:21000"
 
+// OvertimeTick stores a single after-hours trade for chart rendering.
+type OvertimeTick struct {
+	Code   string
+	Time   time.Time
+	Price  float64
+	Volume int64
+}
+
 type KISWebSocket struct {
 	auth       *KISAuth
 	hub        *ws.Hub
@@ -26,6 +34,11 @@ type KISWebSocket struct {
 	subCh      chan string      // full symbols e.g. "005930.KS" (buffered 32)
 	unsubCh    chan string      // full symbols (buffered 32)
 	backoff    time.Duration   // starts 1s, max 60s
+
+	// In-memory cache of today's overtime ticks for chart data
+	otMu    sync.RWMutex
+	otTicks map[string][]OvertimeTick // code -> ticks (sorted by time)
+	otDate  string                     // "20060102" — reset on new day
 }
 
 func NewKISWebSocket(auth *KISAuth, hub *ws.Hub) *KISWebSocket {
@@ -36,7 +49,16 @@ func NewKISWebSocket(auth *KISAuth, hub *ws.Hub) *KISWebSocket {
 		subCh:      make(chan string, 32),
 		unsubCh:    make(chan string, 32),
 		backoff:    1 * time.Second,
+		otTicks:    make(map[string][]OvertimeTick),
+		otDate:     time.Now().Format("20060102"),
 	}
+}
+
+// GetOvertimeTicks returns cached after-hours ticks for a KRX code (6-digit).
+func (k *KISWebSocket) GetOvertimeTicks(code string) []OvertimeTick {
+	k.otMu.RLock()
+	defer k.otMu.RUnlock()
+	return k.otTicks[code]
 }
 
 // Start begins the connection loop in a goroutine.
@@ -199,14 +221,19 @@ func (k *KISWebSocket) drainChannels(conn *websocket.Conn, approvalKey string) {
 }
 
 func (k *KISWebSocket) sendSubscribe(conn *websocket.Conn, approvalKey, code string) error {
-	return k.sendTRRequest(conn, approvalKey, code, "1")
+	// Subscribe to both regular session and after-hours
+	if err := k.sendTRRequest(conn, approvalKey, code, "1", "H0STCNT0"); err != nil {
+		return err
+	}
+	return k.sendTRRequest(conn, approvalKey, code, "1", "H0STOUP0")
 }
 
 func (k *KISWebSocket) sendUnsubscribe(conn *websocket.Conn, approvalKey, code string) error {
-	return k.sendTRRequest(conn, approvalKey, code, "2")
+	k.sendTRRequest(conn, approvalKey, code, "2", "H0STOUP0") //nolint:errcheck
+	return k.sendTRRequest(conn, approvalKey, code, "2", "H0STCNT0")
 }
 
-func (k *KISWebSocket) sendTRRequest(conn *websocket.Conn, approvalKey, code, trType string) error {
+func (k *KISWebSocket) sendTRRequest(conn *websocket.Conn, approvalKey, code, trType, trID string) error {
 	msg := map[string]any{
 		"header": map[string]string{
 			"approval_key": approvalKey,
@@ -216,7 +243,7 @@ func (k *KISWebSocket) sendTRRequest(conn *websocket.Conn, approvalKey, code, tr
 		},
 		"body": map[string]any{
 			"input": map[string]string{
-				"tr_id":  "H0STCNT0",
+				"tr_id":  trID,
 				"tr_key": code,
 			},
 		},
@@ -237,22 +264,51 @@ func (k *KISWebSocket) handleMessage(msg []byte) {
 		return
 	}
 
+	trID := parts[1]
 	fields := strings.Split(parts[3], "^")
-	if len(fields) < 14 {
+
+	var code string
+	var price, change, changePct float64
+	var volume int64
+
+	switch trID {
+	case "H0STCNT0": // 정규장 체결
+		if len(fields) < 14 {
+			return
+		}
+		code = fields[0]
+		price = parseKISFloat(fields[2])
+		changeAbs := parseKISFloat(fields[3])
+		sign := fields[4]
+		volume = parseKISInt64(fields[13])
+
+		change = changeAbs
+		if sign == "4" || sign == "5" {
+			change = -changeAbs
+		}
+
+	case "H0STOUP0": // 시간외 체결
+		if len(fields) < 14 {
+			return
+		}
+		code = fields[0]
+		price = parseKISFloat(fields[2])
+		sign := fields[3]                     // 전일대비부호 (H0STOUP0: index 3)
+		changeAbs := parseKISFloat(fields[4]) // 전일대비 (H0STOUP0: index 4)
+		volume = parseKISInt64(fields[13])    // 누적거래량
+
+		// Cache overtime tick for chart data
+		k.cacheOvertimeTick(code, price, parseKISInt64(fields[12]))
+
+		change = changeAbs
+		if sign == "4" || sign == "5" {
+			change = -changeAbs
+		}
+
+	default:
 		return
 	}
 
-	code := fields[0]                    // 종목코드 (6-digit)
-	price := parseKISFloat(fields[2])    // 현재가
-	changeAbs := parseKISFloat(fields[3]) // 전일대비 (absolute)
-	sign := fields[4]                    // 1=상한,2=상승,3=보합,4=하한,5=하락
-	volume := parseKISInt64(fields[13])  // 누적거래량
-
-	change := changeAbs
-	if sign == "4" || sign == "5" {
-		change = -changeAbs
-	}
-	changePct := 0.0
 	prevClose := price - change
 	if prevClose != 0 {
 		changePct = (change / prevClose) * 100
@@ -270,4 +326,23 @@ func (k *KISWebSocket) handleMessage(msg []byte) {
 			Currency:      "KRW",
 		})
 	}
+}
+
+func (k *KISWebSocket) cacheOvertimeTick(code string, price float64, volume int64) {
+	k.otMu.Lock()
+	defer k.otMu.Unlock()
+
+	// Reset cache on new day
+	today := time.Now().Format("20060102")
+	if today != k.otDate {
+		k.otTicks = make(map[string][]OvertimeTick)
+		k.otDate = today
+	}
+
+	k.otTicks[code] = append(k.otTicks[code], OvertimeTick{
+		Code:   code,
+		Time:   time.Now(),
+		Price:  price,
+		Volume: volume,
+	})
 }

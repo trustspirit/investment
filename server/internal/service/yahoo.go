@@ -302,14 +302,15 @@ func (s *YahooService) GetQuote(ctx context.Context, symbol string) (model.Stock
 		QuoteSummary struct {
 			Result []struct {
 				Price struct {
-					ShortName           string                `json:"shortName"`
-					Currency            string                `json:"currency"`
-					RegularMarketPrice  struct{ Raw float64 } `json:"regularMarketPrice"`
-					RegularMarketOpen   struct{ Raw float64 } `json:"regularMarketOpen"`
-					RegularMarketVolume struct{ Raw int64 }   `json:"regularMarketVolume"`
-					MarketCap           struct{ Raw int64 }   `json:"marketCap"`
-					PreMarketPrice      struct{ Raw float64 } `json:"preMarketPrice"`
-					PostMarketPrice     struct{ Raw float64 } `json:"postMarketPrice"`
+					ShortName                  string                `json:"shortName"`
+					Currency                   string                `json:"currency"`
+					RegularMarketPrice         struct{ Raw float64 } `json:"regularMarketPrice"`
+					RegularMarketOpen          struct{ Raw float64 } `json:"regularMarketOpen"`
+					RegularMarketPreviousClose struct{ Raw float64 } `json:"regularMarketPreviousClose"`
+					RegularMarketVolume        struct{ Raw int64 }   `json:"regularMarketVolume"`
+					MarketCap                  struct{ Raw int64 }   `json:"marketCap"`
+					PreMarketPrice             struct{ Raw float64 } `json:"preMarketPrice"`
+					PostMarketPrice            struct{ Raw float64 } `json:"postMarketPrice"`
 				} `json:"price"`
 			} `json:"result"`
 			Error *struct {
@@ -336,11 +337,11 @@ func (s *YahooService) GetQuote(ctx context.Context, symbol string) (model.Stock
 		currency = "USD"
 	}
 	currentPrice := p.RegularMarketPrice.Raw
-	openPrice := p.RegularMarketOpen.Raw
-	change := currentPrice - openPrice
+	prevClose := p.RegularMarketPreviousClose.Raw
+	change := currentPrice - prevClose
 	changePct := 0.0
-	if openPrice != 0 {
-		changePct = (change / openPrice) * 100
+	if prevClose != 0 {
+		changePct = (change / prevClose) * 100
 	}
 	quote := model.StockQuote{
 		Symbol:        symbol,
@@ -790,9 +791,9 @@ func (s *YahooService) GetMarketIndicators(ctx context.Context) ([]model.MarketI
 		}
 
 		meta := resp.Chart.Result[0].Meta
-		basePrice := meta.RegularMarketOpen
+		basePrice := meta.ChartPreviousClose
 		if basePrice == 0 {
-			basePrice = meta.ChartPreviousClose
+			basePrice = meta.RegularMarketOpen
 		}
 		change := meta.RegularMarketPrice - basePrice
 		changePct := 0.0

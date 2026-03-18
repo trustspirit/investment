@@ -30,7 +30,13 @@ func (s *StockService) GetQuote(ctx context.Context, symbol string) (model.Stock
 
 func (s *StockService) GetHistoricalData(ctx context.Context, symbol string, chartRange string) ([]model.HistoricalDataPoint, error) {
 	if IsKoreanSymbol(symbol) && s.kis != nil {
-		return s.kis.GetHistoricalData(ctx, symbol, chartRange)
+		// KIS for real-time intraday; Yahoo for historical ranges (same intervals as US stocks)
+		switch chartRange {
+		case "1d", "pre":
+			return s.kis.GetHistoricalData(ctx, symbol, chartRange)
+		default:
+			return s.yahoo.GetHistoricalData(ctx, symbol, chartRange)
+		}
 	}
 	return s.yahoo.GetHistoricalData(ctx, symbol, chartRange)
 }

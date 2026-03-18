@@ -25,6 +25,7 @@ type Config struct {
 	AIModel         string
 	KISAppKey       string
 	KISAppSecret    string
+	FinnhubAPIKey   string
 }
 
 func Load() (Config, error) {
@@ -53,6 +54,7 @@ func Load() (Config, error) {
 		AIModel:         strings.TrimSpace(readValue("AI_MODEL")),
 		KISAppKey:       readValue("KIS_APP_KEY"),
 		KISAppSecret:    readValue("KIS_APP_SECRET"),
+		FinnhubAPIKey:   readValue("FINNHUB_API_KEY"),
 	}
 
 	switch cfg.AIProvider {
