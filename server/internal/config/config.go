@@ -23,6 +23,8 @@ type Config struct {
 	OpenAIAPIKey    string
 	AIProvider      string
 	AIModel         string
+	KISAppKey       string
+	KISAppSecret    string
 }
 
 func Load() (Config, error) {
@@ -49,6 +51,8 @@ func Load() (Config, error) {
 		OpenAIAPIKey:    readValue("OPENAI_API_KEY"),
 		AIProvider:      strings.ToLower(withDefault(readValue("AI_PROVIDER"), ProviderAnthropic)),
 		AIModel:         strings.TrimSpace(readValue("AI_MODEL")),
+		KISAppKey:       readValue("KIS_APP_KEY"),
+		KISAppSecret:    readValue("KIS_APP_SECRET"),
 	}
 
 	switch cfg.AIProvider {
