@@ -7,5 +7,6 @@ export function useStockChart(symbol: string, range: ChartRange = '1d') {
     queryKey: ['chart', symbol, range],
     queryFn: () => getChart(symbol, range),
     enabled: !!symbol,
+    staleTime: 30000,
   })
 }

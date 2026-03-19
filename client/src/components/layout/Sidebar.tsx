@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate, useMatch } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Search, TrendingUp, Trash2, Menu, X } from 'lucide-react'
+import { Search, TrendingUp, Trash2, GripVertical, Menu, X } from 'lucide-react'
 import { useWatchlist } from '../../hooks'
 import { getQuote } from '../../api/stocks'
 import { StockSearchModal } from '../search/StockSearchModal'
@@ -38,23 +38,45 @@ function WatchlistItemPrice({ symbol }: { symbol: string }) {
   )
 }
 
-function WatchlistEntry({ item, isActive, onSelect, onRemove }: {
+function WatchlistEntry({ item, isActive, isDragging, onSelect, onRemove, onDragStart, onDragEnter, onDragEnd, onDrop }: {
   item: WatchlistItem
   isActive: boolean
+  isDragging: boolean
   onSelect: () => void
   onRemove: () => void
+  onDragStart: (e: React.DragEvent) => void
+  onDragEnter: () => void
+  onDragEnd: () => void
+  onDrop: (e: React.DragEvent) => void
 }) {
   return (
-    <li className="group relative">
+    <li
+      draggable
+      onDragStart={onDragStart}
+      onDragEnter={onDragEnter}
+      onDragOver={(e) => e.preventDefault()}
+      onDragEnd={onDragEnd}
+      onDrop={onDrop}
+      className="group relative"
+      style={{
+        opacity: isDragging ? 0 : 1,
+        height: isDragging ? 0 : undefined,
+        overflow: isDragging ? 'hidden' : undefined,
+      }}
+    >
       <button
         onClick={onSelect}
-        className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
+        className="flex w-full cursor-pointer items-center gap-1 rounded-lg px-1 py-2.5 text-left transition-colors"
         style={{
           backgroundColor: isActive ? 'rgba(34, 211, 238, 0.12)' : 'transparent',
           border: 'none',
           color: isActive ? '#22d3ee' : 'var(--text-primary)',
         }}
       >
+        <GripVertical
+          className="h-3.5 w-3.5 shrink-0 cursor-grab opacity-0 transition-opacity group-hover:opacity-60"
+          style={{ color: 'var(--text-muted)' }}
+        />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{item.symbol}</div>
           <div className="truncate text-xs" style={{ color: isActive ? 'rgba(34, 211, 238, 0.7)' : 'var(--text-muted)' }}>
@@ -81,13 +103,65 @@ function WatchlistEntry({ item, isActive, onSelect, onRemove }: {
   )
 }
 
+function reorder<T>(list: T[], fromIdx: number, toIdx: number): T[] {
+  const result = [...list]
+  const [moved] = result.splice(fromIdx, 1)
+  result.splice(toIdx, 0, moved)
+  return result
+}
+
 export default function Sidebar() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(true)
   const navigate = useNavigate()
   const match = useMatch('/stock/:symbol')
   const activeSymbol = match?.params.symbol
-  const { watchlist, removeFromWatchlist } = useWatchlist()
+  const { watchlist, removeFromWatchlist, reorderWatchlist } = useWatchlist()
+
+  const [draggingSymbol, setDraggingSymbol] = useState<string | null>(null)
+  const [previewList, setPreviewList] = useState<WatchlistItem[] | null>(null)
+
+  const displayList = previewList ?? watchlist
+
+  const moveItem = (targetSymbol: string | null) => {
+    if (!draggingSymbol) return
+    const without = watchlist.filter((item) => item.symbol !== draggingSymbol)
+    const dragged = watchlist.find((item) => item.symbol === draggingSymbol)
+    if (!dragged) return
+    if (targetSymbol === null) {
+      // Move to end
+      setPreviewList([...without, dragged])
+    } else {
+      const targetIdx = without.findIndex((item) => item.symbol === targetSymbol)
+      if (targetIdx === -1) return
+      const result = [...without]
+      result.splice(targetIdx, 0, dragged)
+      setPreviewList(result)
+    }
+  }
+
+  const handleDragStart = (symbol: string) => (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move'
+    requestAnimationFrame(() => setDraggingSymbol(symbol))
+  }
+
+  const handleDragEnter = (symbol: string) => () => {
+    if (symbol !== draggingSymbol) moveItem(symbol)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (previewList) {
+      reorderWatchlist(previewList.map((item) => item.symbol))
+    }
+    setPreviewList(null)
+    setDraggingSymbol(null)
+  }
+
+  const handleDragEnd = () => {
+    setPreviewList(null)
+    setDraggingSymbol(null)
+  }
 
   return (
     <>
@@ -149,24 +223,37 @@ export default function Sidebar() {
           >
             Watchlist
           </p>
-          {watchlist.length === 0 ? (
+          {displayList.length === 0 ? (
             <p className="px-3 py-4 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
               No stocks in watchlist
             </p>
           ) : (
             <ul className="flex flex-col gap-0.5">
-              {watchlist.map((item) => (
+              {displayList.map((item) => (
                 <WatchlistEntry
                   key={item.symbol}
                   item={item}
                   isActive={activeSymbol === item.symbol}
+                  isDragging={draggingSymbol === item.symbol}
+
                   onSelect={() => {
                     navigate(`/stock/${item.symbol}`)
                     setCollapsed(true)
                   }}
                   onRemove={() => removeFromWatchlist(item.symbol)}
+                  onDragStart={handleDragStart(item.symbol)}
+                  onDragEnter={handleDragEnter(item.symbol)}
+                  onDragEnd={handleDragEnd}
+                  onDrop={handleDrop}
                 />
               ))}
+              {/* Drop zone for moving to end of list */}
+              <li
+                className="h-8"
+                onDragOver={(e) => e.preventDefault()}
+                onDragEnter={() => moveItem(null)}
+                onDrop={handleDrop}
+              />
             </ul>
           )}
         </div>

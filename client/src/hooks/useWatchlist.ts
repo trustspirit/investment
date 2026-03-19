@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getWatchlist, addToWatchlist, removeFromWatchlist } from '../api/watchlist'
+import { getWatchlist, addToWatchlist, removeFromWatchlist, reorderWatchlist } from '../api/watchlist'
 import type { WatchlistItem } from '../types'
 
 export function useWatchlist() {
@@ -8,6 +8,7 @@ export function useWatchlist() {
   const query = useQuery<WatchlistItem[]>({
     queryKey: ['watchlist'],
     queryFn: getWatchlist,
+    staleTime: 30000,
   })
 
   const addMutation = useMutation({
@@ -52,6 +53,25 @@ export function useWatchlist() {
     },
   })
 
+  const reorderMutation = useMutation({
+    mutationFn: (symbols: string[]) => reorderWatchlist(symbols),
+    onMutate: async (symbols) => {
+      await queryClient.cancelQueries({ queryKey: ['watchlist'] })
+      const previous = queryClient.getQueryData<WatchlistItem[]>(['watchlist'])
+      if (previous) {
+        const lookup = new Map(previous.map((item) => [item.symbol, item]))
+        const reordered = symbols.map((s) => lookup.get(s)!).filter(Boolean)
+        queryClient.setQueryData<WatchlistItem[]>(['watchlist'], reordered)
+      }
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['watchlist'], context.previous)
+      }
+    },
+  })
+
   const watchlist = query.data ?? []
 
   return {
@@ -60,6 +80,7 @@ export function useWatchlist() {
     error: query.error,
     addToWatchlist: addMutation.mutate,
     removeFromWatchlist: removeMutation.mutate,
+    reorderWatchlist: reorderMutation.mutate,
     isAdding: addMutation.isPending,
     isRemoving: removeMutation.isPending,
     isInWatchlist: (symbol: string) => watchlist.some((item) => item.symbol === symbol),

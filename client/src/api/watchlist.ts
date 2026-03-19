@@ -17,3 +17,10 @@ export function removeFromWatchlist(symbol: string): Promise<void> {
     method: 'DELETE',
   })
 }
+
+export function reorderWatchlist(symbols: string[]): Promise<void> {
+  return fetchAPI<void>('/api/watchlist/reorder', {
+    method: 'PUT',
+    body: JSON.stringify({ symbols }),
+  })
+}

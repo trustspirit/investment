@@ -1,18 +1,8 @@
 [
   {
-    "symbol": "AAPL",
-    "name": "Apple Inc.",
-    "addedAt": "2026-03-17T13:54:00.656894Z"
-  },
-  {
     "symbol": "005930.KS",
     "name": "SamsungElec",
     "addedAt": "2026-03-17T14:16:53.164388Z"
-  },
-  {
-    "symbol": "DDD",
-    "name": "3D Systems Corporation",
-    "addedAt": "2026-03-18T14:05:32.566712Z"
   },
   {
     "symbol": "000660.KS",
@@ -20,8 +10,18 @@
     "addedAt": "2026-03-18T14:07:34.750674Z"
   },
   {
+    "symbol": "AAPL",
+    "name": "Apple Inc.",
+    "addedAt": "2026-03-17T13:54:00.656894Z"
+  },
+  {
     "symbol": "NVDA",
     "name": "NVIDIA Corporation",
     "addedAt": "2026-03-17T15:09:15.915599Z"
+  },
+  {
+    "symbol": "DDD",
+    "name": "3D Systems Corporation",
+    "addedAt": "2026-03-18T14:05:32.566712Z"
   }
 ]

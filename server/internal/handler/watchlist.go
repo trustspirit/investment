@@ -62,3 +62,21 @@ func (h *WatchlistHandler) Remove(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *WatchlistHandler) Reorder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Symbols []string `json:"symbols"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.watchlist.Reorder(req.Symbols); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

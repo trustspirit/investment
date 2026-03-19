@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { WSPriceUpdate } from '../types'
-
-type PriceUpdateHandler = (update: WSPriceUpdate) => void
+import { useQueryClient } from '@tanstack/react-query'
+import type { WSPriceUpdate, StockQuote } from '../types'
 
 export function useWebSocket() {
+  const queryClient = useQueryClient()
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>()
   const reconnectDelay = useRef(1000)
   const subscribedSymbols = useRef<Set<string>>(new Set())
-  const onPriceUpdateRef = useRef<PriceUpdateHandler | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
   const connect = useCallback(() => {
@@ -26,8 +25,14 @@ export function useWebSocket() {
     ws.onmessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data as string) as WSPriceUpdate
-        if (data.type === 'priceUpdate' && onPriceUpdateRef.current) {
-          onPriceUpdateRef.current(data)
+        if (data.type === 'priceUpdate' && data.quote.price > 0) {
+          const q = data.quote
+          queryClient.setQueryData<StockQuote>(['quote', data.symbol], (prev) => {
+            if (!prev) return prev
+            // Only update price from WS; change/changePercent come from REST refetch
+            // to avoid stale WS ticks overwriting correct values
+            return { ...prev, price: q.price }
+          })
         }
       } catch {
         /* malformed message */
@@ -49,7 +54,7 @@ export function useWebSocket() {
     }
 
     wsRef.current = ws
-  }, [])
+  }, [queryClient])
 
   useEffect(() => {
     connect()
@@ -73,9 +78,5 @@ export function useWebSocket() {
     }
   }, [])
 
-  const setOnPriceUpdate = useCallback((handler: PriceUpdateHandler) => {
-    onPriceUpdateRef.current = handler
-  }, [])
-
-  return { subscribe, unsubscribe, isConnected, setOnPriceUpdate }
+  return { subscribe, unsubscribe, isConnected }
 }

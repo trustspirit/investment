@@ -16,13 +16,11 @@ const watchlistFilePath = "data/watchlist.json"
 
 type WatchlistService struct {
 	mu    sync.RWMutex
-	items map[string]model.WatchlistItem
+	items []model.WatchlistItem
 }
 
 func NewWatchlistService() *WatchlistService {
-	ws := &WatchlistService{
-		items: make(map[string]model.WatchlistItem),
-	}
+	ws := &WatchlistService{}
 	if err := ws.load(); err != nil {
 		slog.Warn("failed to load watchlist", "error", err)
 	}
@@ -33,15 +31,17 @@ func (ws *WatchlistService) Add(symbol, name string) error {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
-	if _, exists := ws.items[symbol]; exists {
-		return nil
+	for _, item := range ws.items {
+		if item.Symbol == symbol {
+			return nil
+		}
 	}
 
-	ws.items[symbol] = model.WatchlistItem{
+	ws.items = append(ws.items, model.WatchlistItem{
 		Symbol:  symbol,
 		Name:    name,
 		AddedAt: time.Now().UTC(),
-	}
+	})
 
 	return ws.persist()
 }
@@ -50,7 +50,12 @@ func (ws *WatchlistService) Remove(symbol string) error {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
-	delete(ws.items, symbol)
+	for i, item := range ws.items {
+		if item.Symbol == symbol {
+			ws.items = append(ws.items[:i], ws.items[i+1:]...)
+			break
+		}
+	}
 	return ws.persist()
 }
 
@@ -58,20 +63,44 @@ func (ws *WatchlistService) List() []model.WatchlistItem {
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()
 
-	list := make([]model.WatchlistItem, 0, len(ws.items))
+	out := make([]model.WatchlistItem, len(ws.items))
+	copy(out, ws.items)
+	return out
+}
+
+// Reorder sets the watchlist order to match the given symbol list.
+func (ws *WatchlistService) Reorder(symbols []string) error {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+
+	lookup := make(map[string]model.WatchlistItem, len(ws.items))
 	for _, item := range ws.items {
-		list = append(list, item)
+		lookup[item.Symbol] = item
 	}
-	return list
+
+	reordered := make([]model.WatchlistItem, 0, len(symbols))
+	for _, sym := range symbols {
+		if item, ok := lookup[sym]; ok {
+			reordered = append(reordered, item)
+			delete(lookup, sym)
+		}
+	}
+	// Append any items not in the new order (safety)
+	for _, item := range lookup {
+		reordered = append(reordered, item)
+	}
+
+	ws.items = reordered
+	return ws.persist()
 }
 
 func (ws *WatchlistService) Symbols() []string {
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()
 
-	symbols := make([]string, 0, len(ws.items))
-	for s := range ws.items {
-		symbols = append(symbols, s)
+	symbols := make([]string, len(ws.items))
+	for i, item := range ws.items {
+		symbols[i] = item.Symbol
 	}
 	return symbols
 }
@@ -82,12 +111,7 @@ func (ws *WatchlistService) persist() error {
 		return fmt.Errorf("create data directory: %w", err)
 	}
 
-	list := make([]model.WatchlistItem, 0, len(ws.items))
-	for _, item := range ws.items {
-		list = append(list, item)
-	}
-
-	data, err := json.MarshalIndent(list, "", "  ")
+	data, err := json.MarshalIndent(ws.items, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal watchlist: %w", err)
 	}
@@ -113,10 +137,7 @@ func (ws *WatchlistService) load() error {
 		return fmt.Errorf("unmarshal watchlist: %w", err)
 	}
 
-	for _, item := range list {
-		ws.items[item.Symbol] = item
-	}
-
+	ws.items = list
 	slog.Info("loaded watchlist", "count", len(ws.items))
 	return nil
 }

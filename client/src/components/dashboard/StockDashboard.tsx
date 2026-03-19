@@ -16,18 +16,12 @@ interface StockDashboardProps {
 
 export function StockDashboard({ symbol }: StockDashboardProps) {
   const { data: quote, isLoading, error, refetch } = useStockQuote(symbol)
-  const { subscribe, unsubscribe, setOnPriceUpdate } = useWebSocket()
+  const { subscribe, unsubscribe } = useWebSocket()
 
   useEffect(() => {
     subscribe(symbol)
     return () => unsubscribe(symbol)
   }, [symbol, subscribe, unsubscribe])
-
-  useEffect(() => {
-    setOnPriceUpdate(() => {
-      refetch()
-    })
-  }, [setOnPriceUpdate, refetch])
 
   if (isLoading) {
     return (

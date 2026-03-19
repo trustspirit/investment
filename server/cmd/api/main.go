@@ -112,6 +112,7 @@ func main() {
 
 	router.Get("/api/watchlist", watchlistHandler.List)
 	router.Post("/api/watchlist", watchlistHandler.Add)
+	router.Put("/api/watchlist/reorder", watchlistHandler.Reorder)
 	router.Delete("/api/watchlist/{symbol}", watchlistHandler.Remove)
 
 	router.Get("/api/insights/{symbol}", insightHandler.Get)
