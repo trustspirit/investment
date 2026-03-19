@@ -12,8 +12,7 @@ function WatchlistItemPrice({ symbol }: { symbol: string }) {
     queryKey: ['quote', symbol],
     queryFn: () => getQuote(symbol),
     enabled: !!symbol,
-    refetchInterval: 30_000,
-    staleTime: 15_000,
+    staleTime: 30_000,
   })
 
   if (!quote) return null

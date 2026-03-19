@@ -7,7 +7,7 @@ export function useStockQuote(symbol: string) {
     queryKey: ['quote', symbol],
     queryFn: () => getQuote(symbol),
     enabled: !!symbol,
-    staleTime: 5000,
-    refetchInterval: 10000,
+    staleTime: 10000,
+    refetchInterval: 30000,
   })
 }

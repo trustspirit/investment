@@ -97,7 +97,7 @@ export function NewsPanel({ symbol }: NewsPanelProps) {
           />
         </button>
       </div>
-      <div className="max-h-[400px] overflow-y-auto">
+      <div className="max-h-100 overflow-y-auto">
         {!news || news.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
             No recent news

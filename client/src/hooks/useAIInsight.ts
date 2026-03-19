@@ -9,6 +9,7 @@ export function useAIInsight(symbol: string) {
     queryKey: ['insight', symbol],
     queryFn: () => getInsight(symbol),
     enabled: !!symbol,
+    staleTime: Infinity,
     retry: false,
   })
 

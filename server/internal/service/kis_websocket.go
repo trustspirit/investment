@@ -152,7 +152,10 @@ func (k *KISWebSocket) readLoop(ctx context.Context, approvalKey string) {
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
-				errCh <- err
+				select {
+				case errCh <- err:
+				default:
+				}
 				return
 			}
 			select {
@@ -339,10 +342,14 @@ func (k *KISWebSocket) cacheOvertimeTick(code string, price float64, volume int6
 		k.otDate = today
 	}
 
-	k.otTicks[code] = append(k.otTicks[code], OvertimeTick{
+	ticks := append(k.otTicks[code], OvertimeTick{
 		Code:   code,
 		Time:   time.Now(),
 		Price:  price,
 		Volume: volume,
 	})
+	if len(ticks) > 1000 {
+		ticks = ticks[len(ticks)-1000:]
+	}
+	k.otTicks[code] = ticks
 }

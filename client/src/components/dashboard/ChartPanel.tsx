@@ -247,7 +247,7 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
           </button>
         ))}
       </div>
-      <div className="relative h-[400px] px-2">
+      <div className="relative h-100 px-2">
         {isLoading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center">
             <LoadingSpinner />

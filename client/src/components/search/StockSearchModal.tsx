@@ -64,7 +64,7 @@ export function StockSearchModal({ onClose }: StockSearchModalProps) {
           </button>
         </div>
 
-        <div className="max-h-[400px] overflow-y-auto">
+        <div className="max-h-100 overflow-y-auto">
           {isLoading && (
             <div className="px-4 py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
               Searching...

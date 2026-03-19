@@ -118,7 +118,10 @@ func (f *FinnhubWebSocket) readLoop(ctx context.Context) {
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
-				errCh <- err
+				select {
+				case errCh <- err:
+				default:
+				}
 				return
 			}
 			select {

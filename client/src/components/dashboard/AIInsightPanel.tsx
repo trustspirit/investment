@@ -45,7 +45,7 @@ export function AIInsightPanel({ symbol }: AIInsightPanelProps) {
         </button>
       </div>
 
-      <div className="max-h-[400px] overflow-y-auto px-4 py-3">
+      <div className="max-h-100 overflow-y-auto px-4 py-3">
         {(isLoading || isGenerating) && <LoadingSpinner size="sm" />}
 
         {!isLoading && !isGenerating && !insight && (
