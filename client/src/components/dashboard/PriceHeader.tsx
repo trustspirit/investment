@@ -81,7 +81,7 @@ export function PriceHeader({ quote }: PriceHeaderProps) {
           </span>
           <span className="text-lg font-semibold" style={{ color: changeColor }}>
             {sign}
-            {quote.change.toFixed(2)} ({sign}
+            {cur === 'KRW' ? Math.round(quote.change).toLocaleString() : quote.change.toFixed(2)} ({sign}
             {quote.changePercent.toFixed(2)}%)
           </span>
         </div>

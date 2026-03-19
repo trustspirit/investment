@@ -207,7 +207,9 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
     if (data && candleRef.current && volumeRef.current && chartRef.current) {
       const candles = toCandlestickData(data)
       const whitespace = buildWhitespacePoints(symbol, range, data)
-      candleRef.current.setData([...candles, ...whitespace] as CandlestickData<Time>[])
+      candleRef.current.setData(
+        [...candles, ...whitespace].sort((a, b) => (a.time as number) - (b.time as number)) as CandlestickData<Time>[],
+      )
       volumeRef.current.setData(toVolumeData(data))
 
       const bounds = getSessionBounds(symbol, range, data)

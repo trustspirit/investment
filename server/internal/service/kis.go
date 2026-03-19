@@ -109,11 +109,10 @@ func (k *KISService) GetQuote(ctx context.Context, symbol string) (model.StockQu
 
 	var resp struct {
 		Output struct {
-			StckPrpr  string `json:"stck_prpr"`  // 현재가
-			PrdyVrss  string `json:"prdy_vrss"`  // 전일대비
-			PrdyCtrt  string `json:"prdy_ctrt"`  // 전일대비율(%)
-			AcmlVol   string `json:"acml_vol"`   // 누적거래량
-			HtsAvls   string `json:"hts_avls"`   // 시가총액(억)
+			StckPrpr string `json:"stck_prpr"` // 현재가
+			StckSdpr string `json:"stck_sdpr"` // 전일종가(기준가)
+			AcmlVol  string `json:"acml_vol"`  // 누적거래량
+			HtsAvls  string `json:"hts_avls"`  // 시가총액(억)
 		} `json:"output"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
@@ -124,21 +123,37 @@ func (k *KISService) GetQuote(ctx context.Context, symbol string) (model.StockQu
 	htsAvls := parseKISInt64(resp.Output.HtsAvls)
 	marketCap := htsAvls * 100_000_000
 
+	price := parseKISFloat(resp.Output.StckPrpr)
+	prevClose := parseKISFloat(resp.Output.StckSdpr)
+
+	// Calculate change from previous close — more reliable than prdy_vrss which can be 0
+	var change, changePct float64
+	if prevClose != 0 {
+		change = price - prevClose
+		changePct = (change / prevClose) * 100
+	}
+
 	quote := model.StockQuote{
 		Symbol:        symbol,
-		Price:         parseKISFloat(resp.Output.StckPrpr),
-		Change:        parseKISFloat(resp.Output.PrdyVrss),
-		ChangePercent: parseKISFloat(resp.Output.PrdyCtrt),
+		Price:         price,
+		Change:        change,
+		ChangePercent: changePct,
 		Volume:        parseKISInt64(resp.Output.AcmlVol),
 		MarketCap:     marketCap,
 		Currency:      "KRW",
 	}
 
-	// Check overtime price — use it only if different from regular session
-	if otPrice, otChange, otChangePct, ok := k.getOvertimePrice(ctx, code); ok && otPrice != quote.Price {
-		quote.Price = otPrice
-		quote.Change = otChange
-		quote.ChangePercent = otChangePct
+	// Check overtime price — only outside regular trading hours (09:00–15:30 KST)
+	now := time.Now()
+	hhmmss := now.Format("150405")
+	if hhmmss >= "153000" || hhmmss < "090000" {
+		if otPrice, _, _, ok := k.getOvertimePrice(ctx, code); ok && otPrice != 0 && otPrice != quote.Price {
+			quote.Price = otPrice
+			if prevClose != 0 {
+				quote.Change = otPrice - prevClose
+				quote.ChangePercent = (quote.Change / prevClose) * 100
+			}
+		}
 	}
 
 	return quote, nil
