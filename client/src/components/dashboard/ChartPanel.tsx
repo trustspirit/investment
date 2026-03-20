@@ -41,7 +41,7 @@ const SESSION_DURATION: Record<string, Record<string, number>> = {
 
 // Korean market absolute hours including overtime (08:00-20:00)
 const KR_MARKET_HOURS: Record<string, { open: [number, number]; close: [number, number] }> = {
-  '1d': { open: [8, 0], close: [20, 0] },
+  '1d': { open: [9, 0], close: [15, 30] },
 }
 
 function getSessionBounds(symbol: string, range: ChartRange, data: HistoricalDataPoint[]): { start: number; end: number } | null {
@@ -217,8 +217,16 @@ export function ChartPanel({ symbol }: ChartPanelProps) {
     }
   }, [])
 
+  // Clear stale chart when switching stocks or ranges
   useEffect(() => {
-    if (data && candleRef.current && volumeRef.current && chartRef.current) {
+    if (candleRef.current && volumeRef.current) {
+      candleRef.current.setData([])
+      volumeRef.current.setData([])
+    }
+  }, [symbol, range])
+
+  useEffect(() => {
+    if (data && data.length > 0 && candleRef.current && volumeRef.current && chartRef.current) {
       const candles = toCandlestickData(data)
       const whitespace = buildWhitespacePoints(symbol, range, data)
       candleRef.current.setData(

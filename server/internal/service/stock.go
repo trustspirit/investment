@@ -33,7 +33,12 @@ func (s *StockService) GetHistoricalData(ctx context.Context, symbol string, cha
 		// KIS for real-time intraday; Yahoo for historical ranges (same intervals as US stocks)
 		switch chartRange {
 		case "1d", "pre":
-			return s.kis.GetHistoricalData(ctx, symbol, chartRange)
+			points, err := s.kis.GetHistoricalData(ctx, symbol, chartRange)
+			if err == nil && len(points) > 0 {
+				return points, nil
+			}
+			// KIS returns no data on weekends/holidays — fall back to Yahoo
+			return s.yahoo.GetHistoricalData(ctx, symbol, chartRange)
 		default:
 			return s.yahoo.GetHistoricalData(ctx, symbol, chartRange)
 		}
