@@ -27,10 +27,10 @@ function toLocalTimestamp(timestamp: string): Time {
   return (utcSeconds + offsetSeconds) as Time
 }
 
-// Interval in seconds for each range
-const RANGE_INTERVAL: Record<string, number> = {
+// Default whitespace interval in seconds (fallback)
+const DEFAULT_INTERVAL: Record<string, number> = {
   'pre': 60,
-  '1d': 300,
+  '1d': 60,
 }
 
 // Session duration in seconds for each market & range
@@ -76,15 +76,29 @@ function getSessionBounds(symbol: string, range: ChartRange, data: HistoricalDat
   }
 }
 
+function detectInterval(data: HistoricalDataPoint[]): number {
+  if (data.length < 3) return 60
+  // Collect intervals between consecutive points, take the median
+  const gaps: number[] = []
+  const limit = Math.min(data.length, 20)
+  for (let i = 1; i < limit; i++) {
+    const diff = (toLocalTimestamp(data[i].timestamp) as number) - (toLocalTimestamp(data[i - 1].timestamp) as number)
+    if (diff > 0) gaps.push(diff)
+  }
+  if (gaps.length === 0) return 60
+  gaps.sort((a, b) => a - b)
+  return gaps[Math.floor(gaps.length / 2)]
+}
+
 function buildWhitespacePoints(symbol: string, range: ChartRange, data: HistoricalDataPoint[]): { time: Time }[] {
   if (data.length === 0) return []
   if (range !== '1d' && range !== 'pre') return []
 
-  const interval = RANGE_INTERVAL[range]
-  if (!interval) return []
-
   const bounds = getSessionBounds(symbol, range, data)
   if (!bounds) return []
+
+  // Match whitespace density to actual data density
+  const interval = detectInterval(data) || DEFAULT_INTERVAL[range] || 60
 
   const firstTime = toLocalTimestamp(data[0].timestamp) as number
   const lastTime = toLocalTimestamp(data[data.length - 1].timestamp) as number
